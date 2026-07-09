@@ -1,0 +1,41 @@
+# CI gates for the IBN platform.
+#
+# Target gate set (implemented incrementally as components land):
+#   1. schema-validate   — Infrahub schema files load cleanly
+#   2. policy-validate   — planner/policies YAML conforms to policy schema
+#   3. golden-tests      — transforms/templates render pinned outputs (infrahub/tests/golden)
+#   4. unit-tests        — planner / deployer / validator
+#   5. simulation-gate   — golden topologies pass expectation checks (nightly + on-demand)
+#
+# Path-filtered so intent-pipeline changes don't run deployer tests and vice versa.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML syntax (placeholder gate)
+        run: |
+          python3 - <<'EOF'
+          import sys, pathlib
+          try:
+              import yaml
+          except ImportError:
+              sys.exit(0)  # runner image always has PyYAML; belt and braces
+          failed = False
+          for p in pathlib.Path('.').rglob('*.y*ml'):
+              if '.git' in p.parts:
+                  continue
+              try:
+                  list(yaml.safe_load_all(p.read_text()))
+              except yaml.YAMLError as e:
+                  print(f'INVALID YAML: {p}\n{e}')
+                  failed = True
+          sys.exit(1 if failed else 0)
+          EOF

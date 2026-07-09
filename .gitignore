@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Containerlab runtime artifacts
+clab-*/
+*.clab.yml.bak
+
+# Secrets — never committed, ever
+*.pem
+*.key
+.env
+.env.*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

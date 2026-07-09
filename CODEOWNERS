@@ -1,0 +1,16 @@
+# Ownership maps to domains and blast radius, not convenience.
+# Placeholder teams — replace with real GitHub teams/users as they exist.
+
+* @pdamasceno
+
+# Schema + compiler + renderer changes re-render production configs.
+/infrahub/                  @pdamasceno
+/infrahub/schemas/          @pdamasceno
+
+# Safety policy is the highest bar in the repo.
+/planner/policies/          @pdamasceno
+/deployer/rollback/         @pdamasceno
+/validator/remediation/     @pdamasceno
+
+# Platform deployment
+/infra/                     @pdamasceno

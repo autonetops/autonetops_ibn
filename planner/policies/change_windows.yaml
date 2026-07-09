@@ -1,0 +1,14 @@
+# Change windows and freezes — enforced by the planner, reviewed like code.
+# Schema TBD with the planner implementation; shape sketch below.
+---
+version: draft
+windows: []
+  # - name: standard-maintenance
+  #   regions: [all]
+  #   days: [tue, wed, thu]
+  #   hours_utc: "02:00-06:00"
+freezes: []
+  # - name: year-end-freeze
+  #   from: 2026-12-15
+  #   to: 2027-01-05
+  #   exceptions_require: [platform-lead, incident-ticket]

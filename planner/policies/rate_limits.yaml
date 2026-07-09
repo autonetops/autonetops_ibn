@@ -1,0 +1,9 @@
+# Rate limits — maximum concurrent / per-window change pressure.
+---
+version: draft
+limits: []
+  # - scope: region
+  #   max_concurrent_devices: 5
+  #   max_devices_per_hour: 20
+  # - scope: global
+  #   max_concurrent_plans: 2

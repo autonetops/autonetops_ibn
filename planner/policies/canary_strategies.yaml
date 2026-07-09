@@ -1,0 +1,18 @@
+# Canary strategies — how a rollout progresses and when it aborts.
+# Selected by the planner based on blast radius class.
+---
+version: draft
+strategies: []
+  # - name: single-device-then-region
+  #   applies_to_blast_radius: [low, moderate]
+  #   stages:
+  #     - select: one_device_per_role
+  #       soak_minutes: 30
+  #       gate: validator.expectations_pass
+  #     - select: one_region
+  #       soak_minutes: 60
+  #       gate: validator.expectations_pass
+  #     - select: remainder
+  # - name: high-blast-radius
+  #   applies_to_blast_radius: [high]
+  #   requires_approvals: [platform-lead, domain-owner]

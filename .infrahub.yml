@@ -1,0 +1,50 @@
+# Infrahub repository-sync manifest.
+# Infrahub reads this file from the repo root and loads the referenced
+# schemas, queries, transforms, templates, generators and checks.
+# Docs: https://docs.infrahub.app/topics/infrahub-yml
+#
+# Sections below are commented-out scaffolding — uncomment and fill in as the
+# first schema/transform/artifact-definition lands.
+---
+schemas:
+  - infrahub/schemas/
+
+# queries:
+#   - name: device_config_data
+#     file_path: infrahub/queries/device_config_data.gql
+
+# python_transforms:
+#   - name: device_config
+#     class_name: DeviceConfigTransform
+#     file_path: infrahub/transforms/device_config.py
+#   - name: device_expectations
+#     class_name: DeviceExpectationsTransform
+#     file_path: infrahub/transforms/device_expectations.py
+
+# jinja2_transforms:
+#   - name: junos_config
+#     query: device_config_data
+#     template_path: infrahub/templates/junos/main.j2
+
+# artifact_definitions:
+#   - name: device-config
+#     artifact_name: device configuration
+#     parameters:
+#       device: name__value
+#     content_type: text/plain
+#     targets: all_devices
+#     transformation: device_config
+#   - name: device-expectations
+#     artifact_name: device expectations
+#     parameters:
+#       device: name__value
+#     content_type: application/json
+#     targets: all_devices
+#     transformation: device_expectations
+
+# check_definitions:
+#   - name: intent_safety_gates
+#     class_name: IntentSafetyCheck
+#     file_path: infrahub/checks/intent_safety.py
+
+# generator_definitions: []
