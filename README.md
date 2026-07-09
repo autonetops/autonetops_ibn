@@ -31,9 +31,11 @@ autonetops_ibn/
   .infrahub.yml          # Infrahub repository-sync manifest (schemas, transforms, templates, checks)
   docs/                  # Architecture, data flows, component contracts, ADRs, runbooks
   infrahub/              # Everything Infrahub syncs: schemas, queries, transforms, templates, generators, checks
-  planner/               # Change planning: diffing, blast radius, safety policies (data, not code)
-  deployer/              # Change execution: transport adapters, workflows, vendor rollback semantics
-  telemetry/             # Observed state: collectors (gNMI/BMP/syslog/SNMP), pipelines, dashboards
+  contracts/             # Generated JSON Schemas for cross-layer contracts (Plan v1, …)
+  plans/                 # Rollout Plans as PRs: review = approval, merge = execution trigger (ADR-0003)
+  planner/               # Python pkg: diffing, blast radius, plan building; policies as data
+  deployer/              # Prefect flows (orchestration) + executor library, adapters, vendor rollback (ADR-0005)
+  telemetry/             # Observed state: gnmic-first collectors (ADR-0006), pipelines, dashboards
   validator/             # Closed-loop proof: rules, drift classification, remediation classes
   simulations/           # Containerlab fabrics and golden topologies (incidents as regression tests)
   infra/                 # Deployment of the platform itself (compose for lab, helm/terraform for prod)
@@ -77,5 +79,8 @@ autonetops_ibn/
 
 ## Status
 
-🚧 Early scaffolding. The structure below is the contract; implementations land
-component by component (planner → deployer → telemetry → validator).
+🚧 Building in the agreed order: **planner** (✅ minimal version: diff → blast
+radius → staged Plan, see `planner/`) → **deployer** → **telemetry** →
+**validator**, proving the full loop on a containerlab topology.
+Key decisions so far: ADR-0003 (plans as Git PRs), ADR-0004 (webhooks first),
+ADR-0005 (Prefect + separate executor), ADR-0006 (gnmic), ADR-0007 (Python).

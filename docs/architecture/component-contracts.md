@@ -35,6 +35,9 @@ Produced alongside config artifacts by a dedicated transform.
 ## 3. Plan (planner → deployer)
 
 A declarative, reviewable document. Nothing executes without one.
+Schema: `contracts/plan/v1/plan.schema.json` (generated from
+`planner/src/autonetops_planner/models.py`). Storage/approval: Git PRs under
+`plans/` (ADR-0003).
 
 - Ordered steps grouped into canary stages.
 - Per-step: target device, artifact reference (checksum), transport, rollback

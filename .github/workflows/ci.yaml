@@ -16,6 +16,20 @@ on:
     branches: [main]
 
 jobs:
+  planner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install planner
+        run: pip install -e './planner[dev]'
+      - name: Tests (includes contract-schema drift gate)
+        run: pytest planner/tests -q
+      - name: Lint
+        run: ruff check planner/src planner/tests
+
   scaffold:
     runs-on: ubuntu-latest
     steps:

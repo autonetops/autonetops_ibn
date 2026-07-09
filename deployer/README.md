@@ -4,10 +4,15 @@ The deployer **executes a Plan and nothing else**. It never decides *what*
 to change (Infrahub) or *whether/when* it is safe (planner). Input: a Plan
 document. Output: an execution report.
 
+Orchestration and execution are **separate by decision** (ADR-0005):
+**Prefect** flows orchestrate (sequence, soak timers, gates, retries, aborts);
+the **executor** is a pure Python library that performs one device-level
+operation at a time and knows nothing about Prefect.
+
 ```
 deployer/
-  src/               # deployer implementation
-  workflows/         # executable change workflows (push config, rotate auth, apply ACL)
+  flows/             # Prefect flows: stage progression, soak, validator gates, abort
+  executor/          # pure library (no Prefect imports): apply/confirm/rollback/diff
   adapters/          # transport isolation — one directory per protocol
     gnmi/
     netconf/
@@ -19,6 +24,10 @@ deployer/
     # eos:   checkpoints
   tests/
 ```
+
+Input: a merged Plan (`contracts/plan/v1`). Trigger: plan-PR merge webhook →
+Prefect deployment (ADR-0004). The executor is also callable from `ibnctl`
+for the documented break-glass path — same code, no orchestrator required.
 
 ## Design rules
 

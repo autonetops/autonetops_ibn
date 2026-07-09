@@ -23,8 +23,12 @@
 - Intent/SoT data changes do **not** happen in this repo — they happen in
   Infrahub via branches + proposed changes (see ADR-0001).
 
-## Language / tooling decisions
+## Language / tooling
 
-Implementation language(s), package layout and lint/test tooling for
-planner/deployer/validator are pending the design discussion — see the ADR
-backlog in `docs/adr/README.md`. Until then, avoid adding build scaffolding.
+Python ≥ 3.11 for all platform components (ADR-0007). Conventions:
+
+- One package per component, `src/` layout (`planner/src/autonetops_planner/`).
+- pydantic v2 models are canonical for cross-layer contracts; JSON Schemas in
+  `contracts/` are generated (`autonetops-planner export-schema`) and
+  drift-checked in CI — never hand-edited.
+- pytest for tests, ruff for lint/format.

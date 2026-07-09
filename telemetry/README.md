@@ -12,11 +12,11 @@ satisfy. That adjacency is deliberate: it prevents the failure mode where
 ```
 telemetry/
   collectors/        # one directory per protocol; config + deployment manifests
-    gnmi/            # streaming subscriptions (interfaces, protocols, counters)
+    gnmi/            # gnmic — primary collector (ADR-0006); subscriptions rendered from intent
     bmp/             # BGP monitoring — RIB visibility for routing expectations
-    syslog/
+    syslog/          # telegraf — legacy gap only, dormant until needed (ADR-0006)
     ipfix/
-    snmp/            # legacy / capability-gap fallback
+    snmp/            # telegraf — legacy gap only, dormant until needed (ADR-0006)
   pipelines/
     normalization/   # vendor-neutral event/metric shapes
     enrichment/      # join with SoT metadata (role, region, tenant, contract)
