@@ -19,7 +19,7 @@ from .artifact_source import ArtifactSource, InfrahubArtifactSource, StaticArtif
 from .diffing import diff_artifacts
 from .models import Plan
 from .plan_builder import build_plan
-from .policies import load_canary_strategies, select_strategy
+from .policies import load_canary_strategies, load_delivery_preferences, select_strategy
 
 app = typer.Typer(help=__doc__, no_args_is_help=True)
 
@@ -58,7 +58,7 @@ def plan_command(
     from .blast_radius import compute_blast_radius
 
     strategy = select_strategy(strategies, compute_blast_radius(changes).classification)
-    plan = build_plan(changes, strategy)
+    plan = build_plan(changes, strategy, load_delivery_preferences(policies_dir))
     plan.created_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
     doc = yaml.safe_dump(plan.model_dump(mode="json", by_alias=True), sort_keys=False)

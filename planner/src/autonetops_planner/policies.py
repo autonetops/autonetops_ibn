@@ -92,3 +92,42 @@ def select_strategy(
         if classification in strategy.applies_to:
             return strategy
     raise LookupError(f"no canary strategy applies to blast radius {classification.value!r}")
+
+
+# -- delivery preferences (ADR-0012) -----------------------------------------
+
+DEFAULT_DELIVERY_PREFERENCES: dict = {
+    "default_order": ["gnmi", "netconf", "http_api"],
+    "platforms": {
+        "junos": ["netconf", "gnmi"],
+        "iosxr": ["netconf", "gnmi"],
+        "eos": ["eapi", "gnmi"],
+        "srlinux": ["gnmi", "json_rpc"],
+        "cloudvision": ["http_api"],
+    },
+}
+
+
+def load_delivery_preferences(policies_dir: str | Path | None) -> dict:
+    """Load delivery_preferences.yaml; fall back to builtin defaults."""
+    if policies_dir is None:
+        return DEFAULT_DELIVERY_PREFERENCES
+    path = Path(policies_dir) / "delivery_preferences.yaml"
+    if not path.exists():
+        return DEFAULT_DELIVERY_PREFERENCES
+    doc = yaml.safe_load(path.read_text()) or {}
+    return {
+        "default_order": doc.get("default_order")
+        or DEFAULT_DELIVERY_PREFERENCES["default_order"],
+        "platforms": doc.get("platforms")
+        or DEFAULT_DELIVERY_PREFERENCES["platforms"],
+    }
+
+
+def select_protocol(platform: str | None, preferences: dict) -> str | None:
+    """First protocol in the platform's preference list; None = unknown
+    platform, the driver's own declared order applies (ADR-0012)."""
+    if not platform:
+        return None
+    order = preferences["platforms"].get(platform.lower())
+    return order[0] if order else None

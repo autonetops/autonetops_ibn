@@ -119,6 +119,7 @@ class Step(BaseModel):
 
     target: StepTarget
     driver: str | None = None  # executor driver hint; None = resolve by platform
+    protocol: str | None = None  # delivery protocol per ADR-0012; None = driver's choice
     platform: str | None = None
     artifact_definition: str
     checksum_before: str | None = None

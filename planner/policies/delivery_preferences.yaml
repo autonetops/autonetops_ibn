@@ -1,0 +1,13 @@
+# Protocol preference for CONFIG DELIVERY, per platform (ADR-0012).
+# Order = transactional safety first. This file is policy (reviewable data);
+# driver CapabilityMatrix declarations are the authority on what works.
+# CLI never wins by default — it requires an explicit entry here.
+---
+version: 1
+default_order: [gnmi, netconf, http_api]
+platforms:
+  junos: [netconf, gnmi]        # commit-confirmed lives on NETCONF
+  iosxr: [netconf, gnmi]        # commit confirmed via NETCONF
+  eos: [eapi, gnmi]             # config sessions w/ commit timer via eAPI
+  srlinux: [gnmi, json_rpc]     # gNMI-native; atomic replace + snapshot_revert
+  cloudvision: [http_api]       # controller: native API by definition

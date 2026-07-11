@@ -6,19 +6,23 @@ vendors, controllers — via the **control-point model** (ADR-0011).
 
 ```
 executor/
-  drivers/             # platform drivers implementing the executor verbs
-    nokia_srlinux/     # Phase 1 — gNMI-native; containerlab CI workhorse
-    juniper_junos/     # Phase 1 — NETCONF; commit-confirmed gold standard
-    arista_eos/        # Phase 1 — eAPI/gNMI; api-style path + checkpoints
-                       # Phase 2: first cloud/API-vendor driver (estate-driven)
-                       # Phase 3: first controller driver (Apstra/CVP/NSO/...)
-  transports/          # protocol primitives drivers compose (ADR-0008 libraries)
-    gnmi/              # pygnmi
-    netconf/           # ncclient
-    ssh/               # scrapli
-    http/              # httpx — API vendors and controllers
-  tests/               # verb-contract tests + containerlab integration per driver
+  pyproject.toml                    # package: autonetops-executor
+  src/autonetops_executor/
+    models.py                       # Evidence, CapabilityMatrix, Diff/Snapshot/PendingChange
+    driver.py                       # BaseDriver verb contract + registry + capability_report()
+    exceptions.py
+    drivers/
+      mock.py                       # ✅ reference driver: full transactional lifecycle in
+                                    #    memory — the executable spec of the verb contract
+      nokia_srlinux.py              # 🚧 gNMI skeleton; first containerlab milestone
+                                    # next: juniper_junos (NETCONF), arista_eos (eAPI/gNMI),
+                                    # Phase 2: API-vendor driver, Phase 3: controller driver
+    transports/                     # shared protocol primitives as drivers need them
+                                    # (pygnmi / ncclient / scrapli / httpx — ADR-0008)
+  tests/                            # verb-contract tests (9) incl. the no-Prefect boundary check
 ```
+
+Install: `pip install -e executor[dev]` (extras: `gnmi`, `netconf`, `ssh`, `http`).
 
 ## The verb contract
 

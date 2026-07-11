@@ -32,6 +32,7 @@ history / reasoning that shaped it.
 | 0009 | Deployer split: two packages now, executor service later if needed | accepted, refined by 0010 |
 | 0010 | Orchestrator and executor are first-class components (NAF alignment) | accepted |
 | 0011 | Southbound target model: control points and driver capabilities | accepted |
+| 0012 | Protocol preference order for delivery strategy selection | accepted |
 
 ## Backlog (decisions we know we owe)
 

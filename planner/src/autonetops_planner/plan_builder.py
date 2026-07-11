@@ -16,7 +16,7 @@ from .models import (
     Step,
     StepTarget,
 )
-from .policies import CanaryStrategy
+from .policies import CanaryStrategy, DEFAULT_DELIVERY_PREFERENCES, select_protocol
 
 # Interim mapping until drivers declare capabilities in SoT (ADR-0011);
 # vendor transactional semantics themselves live in executor/drivers/.
@@ -43,7 +43,7 @@ def _rollback_for(item: ChangeItem) -> str:
     return "snapshot_revert" if item.kind == ControlPointKind.API else "manual"
 
 
-def _step_for(item: ChangeItem) -> Step:
+def _step_for(item: ChangeItem, delivery_prefs: dict) -> Step:
     assert item.checksum_after is not None  # removals never become steps
     return Step(
         target=StepTarget(
@@ -52,6 +52,7 @@ def _step_for(item: ChangeItem) -> Step:
             affected_devices=item.effective_devices,
         ),
         driver=(item.platform or "").lower() or None,
+        protocol=select_protocol(item.platform, delivery_prefs),
         platform=item.platform,
         artifact_definition=item.definition,
         checksum_before=item.checksum_before,
@@ -108,7 +109,12 @@ def _partition(
     return groups
 
 
-def build_plan(changes: ChangeSet, strategy: CanaryStrategy) -> Plan:
+def build_plan(
+    changes: ChangeSet,
+    strategy: CanaryStrategy,
+    delivery_prefs: dict | None = None,
+) -> Plan:
+    delivery_prefs = delivery_prefs or DEFAULT_DELIVERY_PREFERENCES
     blast = compute_blast_radius(changes)
     source = PlanSource(
         base_branch=changes.base_branch, candidate_branch=changes.candidate_branch
@@ -117,7 +123,7 @@ def build_plan(changes: ChangeSet, strategy: CanaryStrategy) -> Plan:
     stages = [
         Stage(
             name=name,
-            steps=[_step_for(i) for i in items],
+            steps=[_step_for(i, delivery_prefs) for i in items],
             gate=Gate(kind=gate, soak_minutes=soak),  # type: ignore[arg-type]
         )
         for name, items, soak, gate in _partition(changes.deployable, strategy)

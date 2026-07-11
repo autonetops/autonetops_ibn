@@ -73,6 +73,7 @@ def test_plan_stages_targets_and_rollback(changeset):
     assert controller.target.kind == ControlPointKind.CONTROLLER
     assert controller.target.affected_devices == ["leaf1-gig", "leaf2-gig"]
     assert controller.rollback.strategy == "controller_revision"
+    assert controller.protocol == "http_api"  # ADR-0012: controllers use native API
 
     # direct step: device == its own affected scope, vendor rollback mapping
     direct = steps["pe1-gru"]
@@ -80,8 +81,33 @@ def test_plan_stages_targets_and_rollback(changeset):
     assert direct.target.affected_devices == ["pe1-gru"]
     assert direct.rollback.strategy == "commit_confirmed"  # junos
     assert direct.driver == "junos"
+    assert direct.protocol == "netconf"  # ADR-0012: transactional safety first
 
     assert plan.removed_targets == ["old-rr"]
+
+
+def test_protocol_selection_policy():
+    from autonetops_planner.policies import DEFAULT_DELIVERY_PREFERENCES, select_protocol
+
+    assert select_protocol("junos", DEFAULT_DELIVERY_PREFERENCES) == "netconf"
+    assert select_protocol("srlinux", DEFAULT_DELIVERY_PREFERENCES) == "gnmi"
+    assert select_protocol("eos", DEFAULT_DELIVERY_PREFERENCES) == "eapi"
+    # unknown platform -> None: the driver's own declared order applies
+    assert select_protocol("mystery-nos", DEFAULT_DELIVERY_PREFERENCES) is None
+    assert select_protocol(None, DEFAULT_DELIVERY_PREFERENCES) is None
+
+
+def test_delivery_preferences_yaml_matches_builtin_defaults():
+    """The committed policy file and code defaults must not drift."""
+    from autonetops_planner.policies import (
+        DEFAULT_DELIVERY_PREFERENCES,
+        load_delivery_preferences,
+    )
+
+    policies_dir = Path(__file__).parents[1] / "policies"
+    loaded = load_delivery_preferences(policies_dir)
+    assert loaded["platforms"] == DEFAULT_DELIVERY_PREFERENCES["platforms"]
+    assert loaded["default_order"] == DEFAULT_DELIVERY_PREFERENCES["default_order"]
 
 
 def test_plan_id_deterministic_and_roundtrips(changeset):

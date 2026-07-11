@@ -233,6 +233,18 @@
           "default": null,
           "title": "Platform"
         },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
         "rollback": {
           "$ref": "#/$defs/RollbackSpec"
         },

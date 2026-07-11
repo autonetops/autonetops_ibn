@@ -38,7 +38,8 @@ autonetops_ibn/
   orchestrator/          # Prefect flows: deploy, reconcile, remediate, onboard (ADR-0010)
   executor/              # southbound layer: drivers (NOS/API/controller) + transports (ADR-0010/0011)
   telemetry/             # Observed state: gnmic-first collectors (ADR-0006), pipelines, dashboards
-  validator/             # Closed-loop proof: rules, drift classification, remediation classes
+  validator/             # Passive proof: compliance rules + drift classification (telemetry-driven)
+  remediation/           # Active verification suites + remediation playbooks (content library)
   simulations/           # Containerlab fabrics and golden topologies (incidents as regression tests)
   infra/                 # Deployment of the platform itself (compose for lab, helm/terraform for prod)
   tools/                 # ibnctl CLI, migration and import helpers
@@ -82,11 +83,13 @@ autonetops_ibn/
 
 ## Status
 
-🚧 Building in the agreed order: **planner** (✅ minimal version: diff → blast
-radius → staged Plan over control points, see `planner/`) →
-**executor + orchestrator** → **telemetry** →
-**validator**, proving the full loop on a containerlab topology.
+🚧 Build order: **planner** ✅ (diff → blast radius → staged Plan over control
+points, protocol selection per ADR-0012) → **executor** 🚧 (verb contract +
+capability registry + reference driver ✅; SR Linux driver pending containerlab
+integration) → **orchestrator flows** → **telemetry** → **validator**,
+proving the full loop on a containerlab topology.
 Key decisions so far: ADR-0003 (plans as Git PRs), ADR-0004 (webhooks first),
 ADR-0005/0009/0010 (orchestrator and executor as separate first-class roles),
 ADR-0006 (gnmic), ADR-0007 (Python), ADR-0008 (typed transport libraries),
-ADR-0011 (control-point target model: NOS / API vendors / controllers).
+ADR-0011 (control-point target model: NOS / API vendors / controllers),
+ADR-0012 (protocol preference: transactional safety first).

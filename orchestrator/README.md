@@ -9,9 +9,13 @@ executor exclusively through its public API (ADR-0009).
 orchestrator/
   flows/
     deploy/      # Plan rollout: stage progression, soak timers, validator gates, abort
+    verify/      # run verification suites from remediation/verifications/:
+                 #   post-deploy (stage gates), scheduled (nightly invariant sweep),
+                 #   on-demand (ibnctl). Read-only against the network.
     reconcile/   # "webhooks trigger, reconciliation guarantees" loops (ADR-0004):
                  #   merged-but-unplanned changes, merged-but-unrun plans
-    remediate/   # validator safe-fix proposals -> new plan PRs (never direct pushes)
+    remediate/   # executes remediation/playbooks/ by class: safe fixes propose
+                 #   plan PRs (never direct pushes), quarantines contain + collect
     onboard/     # device / control-point / tenant onboarding workflows
 ```
 

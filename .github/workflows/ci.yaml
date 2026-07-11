@@ -30,6 +30,20 @@ jobs:
       - name: Lint
         run: ruff check planner/src planner/tests
 
+  executor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install executor
+        run: pip install -e './executor[dev]'
+      - name: Tests (verb contract + no-Prefect boundary)
+        run: pytest executor/tests -q
+      - name: Lint
+        run: ruff check executor/src executor/tests
+
   scaffold:
     runs-on: ubuntu-latest
     steps:
