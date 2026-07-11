@@ -13,6 +13,8 @@ venv/
 *.tfstate
 *.tfstate.*
 *.tfvars
+backend.hcl
+# note: .terraform.lock.hcl IS committed (provider version pinning)
 
 # Containerlab runtime artifacts
 clab-*/

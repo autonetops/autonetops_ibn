@@ -5,8 +5,9 @@ production, not after the first incident.
 
 Planned set (stubs are created as components land):
 
-- `deployer.md` — operating the deployer: pausing rollouts, resuming, manual
-  rollback per vendor, credential rotation.
+- `orchestrator.md` — pausing/resuming rollouts, reconciliation loops.
+- `executor.md` — manual rollback per driver, break-glass via ibnctl,
+  credential rotation.
 - `validator.md` — interpreting drift classes, clearing quarantines, tuning
   noisy rules.
 - `emergency-changes.md` — the sanctioned break-glass path and the backport

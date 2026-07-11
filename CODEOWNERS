@@ -9,8 +9,14 @@
 
 # Safety policy is the highest bar in the repo.
 /planner/policies/          @pdamasceno
-/deployer/rollback/         @pdamasceno
+/executor/drivers/          @pdamasceno
 /validator/remediation/     @pdamasceno
+
+# Plan PRs: approval = authorization to change the network (ADR-0003).
+/plans/                     @pdamasceno
+
+# Contract schemas: consumed by every layer.
+/contracts/                 @pdamasceno
 
 # Platform deployment
 /infra/                     @pdamasceno

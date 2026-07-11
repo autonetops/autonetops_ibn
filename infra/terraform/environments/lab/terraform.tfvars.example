@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+org_slug        = "acme"
+billing_account = "000000-000000-000000"
+# folder_id     = "1234567890"
+
+# Pin after checking latest stable chart releases:
+#   https://github.com/opsmill/infrahub-helm/releases
+#   https://github.com/PrefectHQ/prefect-helm/releases
+#   https://github.com/prometheus-community/helm-charts/releases
+infrahub_chart_version        = "x.y.z"
+prefect_chart_version         = "x.y.z"
+kube_prometheus_stack_version = "x.y.z"

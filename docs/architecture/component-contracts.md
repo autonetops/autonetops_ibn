@@ -7,14 +7,14 @@ contracts; each contract gets its own schema once implementation starts.
 ## Contract map
 
 ```
-Infrahub ──(config artifacts)──────────▶ planner ──(Plan)──▶ deployer
+Infrahub ──(config artifacts)──────────▶ planner ──(Plan)──▶ orchestrator ──▶ executor
 Infrahub ──(expectation artifacts)─────▶ validator
 telemetry ──(normalized observed state)▶ validator
 validator ──(compliance / drift report)▶ Infrahub, planner
-deployer ──(execution report)──────────▶ validator, Infrahub
+executor ──(execution report)──────────▶ validator, Infrahub
 ```
 
-## 1. Config artifact (Infrahub → planner/deployer)
+## 1. Config artifact (Infrahub → planner/executor)
 
 Produced by Infrahub artifact definitions (transform + template).
 
@@ -32,19 +32,26 @@ Produced alongside config artifacts by a dedicated transform.
   signals + freshness, forwarding constraints.
 - Versioned with the same schema-versioning discipline as intent.
 
-## 3. Plan (planner → deployer)
+## 3. Plan (planner → orchestrator/executor)
 
 A declarative, reviewable document. Nothing executes without one.
+Schema: `contracts/plan/v1/plan.schema.json` (generated from
+`planner/src/autonetops_planner/models.py`). Storage/approval: Git PRs under
+`plans/` (ADR-0003).
 
 - Ordered steps grouped into canary stages.
-- Per-step: target device, artifact reference (checksum), transport, rollback
-  strategy, validation checkpoint, abort criteria.
-- Metadata: blast radius summary, policy evaluations, approvals required.
+- Per-step: target **control point** (kind + affected devices, ADR-0011),
+  artifact reference (checksum), driver hint, rollback strategy, validation
+  checkpoint, abort criteria.
+- Metadata: blast radius (computed over affected devices, listing control
+  points), policy evaluations, approvals required.
 
-## 4. Execution report (deployer → validator/Infrahub)
+## 4. Execution report (executor → validator/Infrahub)
 
 - Per-step outcome: applied / rolled-back / aborted, timestamps, diffs actually
   committed, transport evidence.
+- Steps target control points (direct device, API endpoint, or controller);
+  evidence covers the full affected-device scope (ADR-0011).
 
 ## 5. Observed state (telemetry → validator)
 

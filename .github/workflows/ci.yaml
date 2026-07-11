@@ -4,10 +4,10 @@
 #   1. schema-validate   — Infrahub schema files load cleanly
 #   2. policy-validate   — planner/policies YAML conforms to policy schema
 #   3. golden-tests      — transforms/templates render pinned outputs (infrahub/tests/golden)
-#   4. unit-tests        — planner / deployer / validator
+#   4. unit-tests        — planner / orchestrator / executor / validator
 #   5. simulation-gate   — golden topologies pass expectation checks (nightly + on-demand)
 #
-# Path-filtered so intent-pipeline changes don't run deployer tests and vice versa.
+# Path-filtered so intent-pipeline changes don't run executor tests and vice versa.
 name: ci
 
 on:
@@ -16,6 +16,34 @@ on:
     branches: [main]
 
 jobs:
+  planner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install planner
+        run: pip install -e './planner[dev]'
+      - name: Tests (includes contract-schema drift gate)
+        run: pytest planner/tests -q
+      - name: Lint
+        run: ruff check planner/src planner/tests
+
+  executor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install executor
+        run: pip install -e './executor[dev]'
+      - name: Tests (verb contract + no-Prefect boundary)
+        run: pytest executor/tests -q
+      - name: Lint
+        run: ruff check executor/src executor/tests
+
   scaffold:
     runs-on: ubuntu-latest
     steps:

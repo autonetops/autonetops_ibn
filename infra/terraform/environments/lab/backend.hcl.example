@@ -1,0 +1,2 @@
+# Copy to backend.hcl (gitignored); bucket name comes from bootstrap output.
+bucket = "acme-ibn-tfstate"

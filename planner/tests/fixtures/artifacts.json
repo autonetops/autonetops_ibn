@@ -1,0 +1,14 @@
+{
+  "main": [
+    {"target": "pe1-gru", "kind": "direct", "definition": "device-config", "checksum": "aaa111", "storage_id": "s-1", "platform": "junos", "role": "pe", "region": "gru"},
+    {"target": "pe2-gru", "kind": "direct", "definition": "device-config", "checksum": "bbb222", "storage_id": "s-2", "platform": "junos", "role": "pe", "region": "gru"},
+    {"target": "cvp-gig", "kind": "controller", "definition": "fabric-intent", "checksum": "ccc333", "storage_id": "s-3", "platform": "cloudvision", "role": "fabric-manager", "region": "gig", "affected_devices": ["leaf1-gig", "leaf2-gig"]},
+    {"target": "old-rr", "kind": "direct", "definition": "device-config", "checksum": "ddd444", "storage_id": "s-4", "platform": "iosxr", "role": "rr", "region": "gru"}
+  ],
+  "add-customer-c": [
+    {"target": "pe1-gru", "kind": "direct", "definition": "device-config", "checksum": "aaa999", "storage_id": "s-10", "platform": "junos", "role": "pe", "region": "gru"},
+    {"target": "pe2-gru", "kind": "direct", "definition": "device-config", "checksum": "bbb222", "storage_id": "s-2", "platform": "junos", "role": "pe", "region": "gru"},
+    {"target": "cvp-gig", "kind": "controller", "definition": "fabric-intent", "checksum": "ccc999", "storage_id": "s-11", "platform": "cloudvision", "role": "fabric-manager", "region": "gig", "affected_devices": ["leaf1-gig", "leaf2-gig"]},
+    {"target": "pe3-gru", "kind": "direct", "definition": "device-config", "checksum": "eee555", "storage_id": "s-12", "platform": "junos", "role": "pe", "region": "gru"}
+  ]
+}

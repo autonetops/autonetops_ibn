@@ -1,0 +1,367 @@
+{
+  "$defs": {
+    "BlastRadius": {
+      "properties": {
+        "class": {
+          "$ref": "#/$defs/BlastRadiusClass"
+        },
+        "control_points": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Control Points",
+          "type": "array"
+        },
+        "device_count": {
+          "title": "Device Count",
+          "type": "integer"
+        },
+        "devices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Devices",
+          "type": "array"
+        },
+        "regions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Regions",
+          "type": "array"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "class",
+        "device_count",
+        "devices"
+      ],
+      "title": "BlastRadius",
+      "type": "object"
+    },
+    "BlastRadiusClass": {
+      "enum": [
+        "low",
+        "moderate",
+        "high"
+      ],
+      "title": "BlastRadiusClass",
+      "type": "string"
+    },
+    "ControlPointKind": {
+      "enum": [
+        "direct",
+        "api",
+        "controller"
+      ],
+      "title": "ControlPointKind",
+      "type": "string"
+    },
+    "Gate": {
+      "description": "Validation checkpoint between stages. Expectations are evaluated per\nDEVICE regardless of how the change was pushed (ADR-0011).",
+      "properties": {
+        "kind": {
+          "default": "validator.expectations_pass",
+          "enum": [
+            "validator.expectations_pass",
+            "manual"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "soak_minutes": {
+          "default": 0,
+          "title": "Soak Minutes",
+          "type": "integer"
+        }
+      },
+      "title": "Gate",
+      "type": "object"
+    },
+    "PlanSource": {
+      "properties": {
+        "base_branch": {
+          "title": "Base Branch",
+          "type": "string"
+        },
+        "candidate_branch": {
+          "title": "Candidate Branch",
+          "type": "string"
+        },
+        "proposed_change_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proposed Change Id"
+        }
+      },
+      "required": [
+        "base_branch",
+        "candidate_branch"
+      ],
+      "title": "PlanSource",
+      "type": "object"
+    },
+    "PolicyEvaluation": {
+      "properties": {
+        "canary_strategy": {
+          "title": "Canary Strategy",
+          "type": "string"
+        },
+        "change_window": {
+          "default": "not_evaluated",
+          "title": "Change Window",
+          "type": "string"
+        },
+        "rate_limits": {
+          "default": "not_evaluated",
+          "title": "Rate Limits",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canary_strategy"
+      ],
+      "title": "PolicyEvaluation",
+      "type": "object"
+    },
+    "RollbackSpec": {
+      "description": "Strategy names are driver-declared (ADR-0011). Well-known values:\ncommit_confirmed, commit_confirm, checkpoint, snapshot_revert,\ncontroller_revision, manual.",
+      "properties": {
+        "confirm_timeout_minutes": {
+          "default": 10,
+          "title": "Confirm Timeout Minutes",
+          "type": "integer"
+        },
+        "strategy": {
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy"
+      ],
+      "title": "RollbackSpec",
+      "type": "object"
+    },
+    "Stage": {
+      "properties": {
+        "gate": {
+          "$ref": "#/$defs/Gate"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "steps"
+      ],
+      "title": "Stage",
+      "type": "object"
+    },
+    "Step": {
+      "description": "One control-point-level operation for the executor.",
+      "properties": {
+        "abort_on_failure": {
+          "default": true,
+          "title": "Abort On Failure",
+          "type": "boolean"
+        },
+        "artifact_definition": {
+          "title": "Artifact Definition",
+          "type": "string"
+        },
+        "checksum_after": {
+          "title": "Checksum After",
+          "type": "string"
+        },
+        "checksum_before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checksum Before"
+        },
+        "driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Driver"
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "rollback": {
+          "$ref": "#/$defs/RollbackSpec"
+        },
+        "storage_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Id"
+        },
+        "target": {
+          "$ref": "#/$defs/StepTarget"
+        }
+      },
+      "required": [
+        "target",
+        "artifact_definition",
+        "checksum_after",
+        "rollback"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "StepTarget": {
+      "properties": {
+        "affected_devices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Devices",
+          "type": "array"
+        },
+        "control_point": {
+          "title": "Control Point",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ControlPointKind",
+          "default": "direct"
+        }
+      },
+      "required": [
+        "control_point"
+      ],
+      "title": "StepTarget",
+      "type": "object"
+    }
+  },
+  "$id": "https://autonetops.dev/contracts/plan/v1/plan.schema.json",
+  "description": "The declarative rollout document. Nothing executes without one.\n\nImmutable once approved (merged): any change to the rollout is a new Plan\nthat supersedes this one (ADR-0003).",
+  "properties": {
+    "abort_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Abort Criteria",
+      "type": "array"
+    },
+    "blast_radius": {
+      "$ref": "#/$defs/BlastRadius"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "policy_evaluation": {
+      "$ref": "#/$defs/PolicyEvaluation"
+    },
+    "removed_targets": {
+      "description": "Control points whose artifacts disappeared; requires an explicit decommission decision, never auto-executed.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Removed Targets",
+      "type": "array"
+    },
+    "source": {
+      "$ref": "#/$defs/PlanSource"
+    },
+    "stages": {
+      "items": {
+        "$ref": "#/$defs/Stage"
+      },
+      "title": "Stages",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "source",
+    "blast_radius",
+    "policy_evaluation",
+    "stages"
+  ],
+  "title": "Plan",
+  "type": "object"
+}
