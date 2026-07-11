@@ -4,15 +4,17 @@ The deployer **executes a Plan and nothing else**. It never decides *what*
 to change (Infrahub) or *whether/when* it is safe (planner). Input: a Plan
 document. Output: an execution report.
 
-Orchestration and execution are **separate by decision** (ADR-0005):
-**Prefect** flows orchestrate (sequence, soak timers, gates, retries, aborts);
-the **executor** is a pure Python library that performs one device-level
-operation at a time and knows nothing about Prefect.
+Orchestration and execution are **separate by decision** (ADR-0005), and
+separated as **two Python packages** (ADR-0009): `autonetops-deployer-flows`
+depends on `autonetops-executor` only through its public API. The executor is
+promotable to a standalone device-gateway service later (credential isolation,
+session brokering) without moving anything else. Transport libraries:
+pygnmi / ncclient / scrapli, vendor SDKs inside rollback modules (ADR-0008).
 
 ```
 deployer/
-  flows/             # Prefect flows: stage progression, soak, validator gates, abort
-  executor/          # pure library (no Prefect imports): apply/confirm/rollback/diff
+  flows/             # pkg autonetops-deployer-flows: Prefect flows — stages, soak, gates, abort
+  executor/          # pkg autonetops-executor (no Prefect imports): apply/confirm/rollback/diff
   adapters/          # transport isolation — one directory per protocol
     gnmi/
     netconf/

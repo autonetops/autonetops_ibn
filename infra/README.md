@@ -8,7 +8,9 @@ configures the platform.
 infra/
   compose/           # local/lab stack: Infrahub + platform services + containerlab
   helm/              # one chart (or subchart) per platform component
-  terraform/         # clusters, IAM, storage, secrets backends
+  terraform/         # bootstrap + modules (project/network/cluster/platform) +
+                     # environments (lab/staging/prod) — see terraform/README.md
+                     # for the structure and the 5-stage scaling path
   kustomize/         # environment overlays for k8s manifests
 ```
 

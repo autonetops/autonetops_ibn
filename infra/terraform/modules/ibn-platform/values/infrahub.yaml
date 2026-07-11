@@ -1,0 +1,3 @@
+# Infrahub chart values — start from chart defaults; harden before prod
+# (resources, HA for neo4j/rabbitmq/redis, artifact storage backend).
+{}

@@ -1,0 +1,2 @@
+# kube-prometheus-stack values — defaults for lab; retention/HA before prod.
+{}

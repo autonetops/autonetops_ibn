@@ -28,6 +28,8 @@ history / reasoning that shaped it.
 | 0005 | Prefect for orchestration; executor kept separate | accepted |
 | 0006 | Telemetry collection: gnmic primary, telegraf for legacy gaps | accepted |
 | 0007 | Python as the platform implementation language | accepted |
+| 0008 | Device interaction: typed per-transport libraries, not a runner framework | accepted |
+| 0009 | Deployer split: two packages now, executor service later if needed | accepted |
 
 ## Backlog (decisions we know we owe)
 
