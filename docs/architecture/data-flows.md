@@ -11,8 +11,9 @@
 5. **Planner** diffs branch artifacts vs. deployed state → Plan with blast
    radius annotation. High blast radius ⇒ higher approval bar.
 6. Proposed change is merged; the Plan is approved (process TBD — see ADR
-   backlog) and handed to the **deployer**.
-7. Deployer executes canary stage 1 → validator gates → next stage → … done.
+   backlog) and handed to the **orchestrator**.
+7. The deploy flow executes canary stage 1 via the executor → validator gates
+   → next stage → … done.
 8. Validator confirms expectations; compliance status lands back in Infrahub.
 
 ## Flow 2 — Drift detection (no change requested)

@@ -5,6 +5,13 @@
         "class": {
           "$ref": "#/$defs/BlastRadiusClass"
         },
+        "control_points": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Control Points",
+          "type": "array"
+        },
         "device_count": {
           "title": "Device Count",
           "type": "integer"
@@ -48,8 +55,17 @@
       "title": "BlastRadiusClass",
       "type": "string"
     },
+    "ControlPointKind": {
+      "enum": [
+        "direct",
+        "api",
+        "controller"
+      ],
+      "title": "ControlPointKind",
+      "type": "string"
+    },
     "Gate": {
-      "description": "Validation checkpoint between stages.",
+      "description": "Validation checkpoint between stages. Expectations are evaluated per\nDEVICE regardless of how the change was pushed (ADR-0011).",
       "properties": {
         "kind": {
           "default": "validator.expectations_pass",
@@ -123,6 +139,7 @@
       "type": "object"
     },
     "RollbackSpec": {
+      "description": "Strategy names are driver-declared (ADR-0011). Well-known values:\ncommit_confirmed, commit_confirm, checkpoint, snapshot_revert,\ncontroller_revision, manual.",
       "properties": {
         "confirm_timeout_minutes": {
           "default": 10,
@@ -130,12 +147,6 @@
           "type": "integer"
         },
         "strategy": {
-          "enum": [
-            "commit_confirmed",
-            "commit_confirm",
-            "checkpoint",
-            "manual"
-          ],
           "title": "Strategy",
           "type": "string"
         }
@@ -171,7 +182,7 @@
       "type": "object"
     },
     "Step": {
-      "description": "One device-level operation for the deployer's executor.",
+      "description": "One control-point-level operation for the executor.",
       "properties": {
         "abort_on_failure": {
           "default": true,
@@ -198,9 +209,17 @@
           "default": null,
           "title": "Checksum Before"
         },
-        "device": {
-          "title": "Device",
-          "type": "string"
+        "driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Driver"
         },
         "platform": {
           "anyOf": [
@@ -229,25 +248,41 @@
           "default": null,
           "title": "Storage Id"
         },
-        "transport": {
-          "default": "gnmi",
-          "enum": [
-            "gnmi",
-            "netconf",
-            "ssh",
-            "vendor_api"
-          ],
-          "title": "Transport",
-          "type": "string"
+        "target": {
+          "$ref": "#/$defs/StepTarget"
         }
       },
       "required": [
-        "device",
+        "target",
         "artifact_definition",
         "checksum_after",
         "rollback"
       ],
       "title": "Step",
+      "type": "object"
+    },
+    "StepTarget": {
+      "properties": {
+        "affected_devices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Devices",
+          "type": "array"
+        },
+        "control_point": {
+          "title": "Control Point",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ControlPointKind",
+          "default": "direct"
+        }
+      },
+      "required": [
+        "control_point"
+      ],
+      "title": "StepTarget",
       "type": "object"
     }
   },
@@ -289,12 +324,12 @@
     "policy_evaluation": {
       "$ref": "#/$defs/PolicyEvaluation"
     },
-    "removed_devices": {
-      "description": "Devices whose artifacts disappeared; requires an explicit decommission decision, never auto-executed.",
+    "removed_targets": {
+      "description": "Control points whose artifacts disappeared; requires an explicit decommission decision, never auto-executed.",
       "items": {
         "type": "string"
       },
-      "title": "Removed Devices",
+      "title": "Removed Targets",
       "type": "array"
     },
     "source": {

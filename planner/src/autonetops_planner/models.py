@@ -3,6 +3,11 @@
 These models are the canonical definition; the JSON Schema under
 contracts/plan/v1/plan.schema.json is GENERATED from them via
 `autonetops-planner export-schema` and checked for drift in CI (ADR-0007).
+
+Target model (ADR-0011): the unit of execution is a CONTROL POINT — a direct
+NOS device, an API endpoint, or a controller managing many devices. Blast
+radius is always computed over affected *devices*, however the change is
+pushed.
 """
 
 from __future__ import annotations
@@ -23,22 +28,38 @@ class BlastRadiusClass(str, Enum):
     HIGH = "high"
 
 
-class DeviceArtifact(BaseModel):
-    """One rendered artifact for one device, as exposed by Infrahub."""
+class ControlPointKind(str, Enum):
+    DIRECT = "direct"  # NOS device we own the transaction on
+    API = "api"  # structured API per device / cloud tenant
+    CONTROLLER = "controller"  # one endpoint managing N devices
 
-    device: str
+
+class TargetArtifact(BaseModel):
+    """One rendered artifact for one control point, as exposed by Infrahub."""
+
+    target: str
+    kind: ControlPointKind = ControlPointKind.DIRECT
     definition: str
     checksum: str
     storage_id: str | None = None
     platform: str | None = None
     role: str | None = None
     region: str | None = None
+    affected_devices: list[str] = Field(
+        default_factory=list,
+        description="Devices this artifact ultimately touches; empty means [target].",
+    )
+
+    @property
+    def effective_devices(self) -> list[str]:
+        return self.affected_devices or [self.target]
 
 
 class ChangeItem(BaseModel):
-    """The unit of diffing: one (device, artifact definition) pair."""
+    """The unit of diffing: one (control point, artifact definition) pair."""
 
-    device: str
+    target: str
+    kind: ControlPointKind = ControlPointKind.DIRECT
     definition: str
     checksum_before: str | None = None
     checksum_after: str | None = None
@@ -46,14 +67,19 @@ class ChangeItem(BaseModel):
     platform: str | None = None
     role: str | None = None
     region: str | None = None
+    affected_devices: list[str] = Field(default_factory=list)
 
     @property
-    def kind(self) -> Literal["added", "removed", "changed"]:
+    def change_kind(self) -> Literal["added", "removed", "changed"]:
         if self.checksum_before is None:
             return "added"
         if self.checksum_after is None:
             return "removed"
         return "changed"
+
+    @property
+    def effective_devices(self) -> list[str]:
+        return self.affected_devices or [self.target]
 
 
 class ChangeSet(BaseModel):
@@ -66,27 +92,33 @@ class ChangeSet(BaseModel):
     @property
     def deployable(self) -> list[ChangeItem]:
         """Added/changed items; removals need a human decision (decommission)."""
-        return [i for i in self.items if i.kind != "removed"]
+        return [i for i in self.items if i.change_kind != "removed"]
 
     @property
     def removed(self) -> list[ChangeItem]:
-        return [i for i in self.items if i.kind == "removed"]
+        return [i for i in self.items if i.change_kind == "removed"]
 
-    @property
-    def devices(self) -> list[str]:
-        return sorted({i.device for i in self.items})
+
+class StepTarget(BaseModel):
+    control_point: str
+    kind: ControlPointKind = ControlPointKind.DIRECT
+    affected_devices: list[str] = Field(default_factory=list)
 
 
 class RollbackSpec(BaseModel):
-    strategy: Literal["commit_confirmed", "commit_confirm", "checkpoint", "manual"]
+    """Strategy names are driver-declared (ADR-0011). Well-known values:
+    commit_confirmed, commit_confirm, checkpoint, snapshot_revert,
+    controller_revision, manual."""
+
+    strategy: str
     confirm_timeout_minutes: int = 10
 
 
 class Step(BaseModel):
-    """One device-level operation for the deployer's executor."""
+    """One control-point-level operation for the executor."""
 
-    device: str
-    transport: Literal["gnmi", "netconf", "ssh", "vendor_api"] = "gnmi"
+    target: StepTarget
+    driver: str | None = None  # executor driver hint; None = resolve by platform
     platform: str | None = None
     artifact_definition: str
     checksum_before: str | None = None
@@ -97,7 +129,8 @@ class Step(BaseModel):
 
 
 class Gate(BaseModel):
-    """Validation checkpoint between stages."""
+    """Validation checkpoint between stages. Expectations are evaluated per
+    DEVICE regardless of how the change was pushed (ADR-0011)."""
 
     kind: Literal["validator.expectations_pass", "manual"] = "validator.expectations_pass"
     soak_minutes: int = 0
@@ -115,6 +148,7 @@ class BlastRadius(BaseModel):
     classification: BlastRadiusClass = Field(alias="class")
     device_count: int
     devices: list[str]
+    control_points: list[str] = Field(default_factory=list)
     roles: list[str] = Field(default_factory=list)
     regions: list[str] = Field(default_factory=list)
 
@@ -145,10 +179,10 @@ class Plan(BaseModel):
     blast_radius: BlastRadius
     policy_evaluation: PolicyEvaluation
     stages: list[Stage]
-    removed_devices: list[str] = Field(
+    removed_targets: list[str] = Field(
         default_factory=list,
-        description="Devices whose artifacts disappeared; requires an explicit "
-        "decommission decision, never auto-executed.",
+        description="Control points whose artifacts disappeared; requires an "
+        "explicit decommission decision, never auto-executed.",
     )
     abort_criteria: list[str] = Field(default_factory=list)
 
@@ -158,7 +192,7 @@ class Plan(BaseModel):
         payload = json.dumps(
             {
                 "source": source.model_dump(),
-                "stages": [s.model_dump() for s in stages],
+                "stages": [s.model_dump(mode="json") for s in stages],
             },
             sort_keys=True,
         )

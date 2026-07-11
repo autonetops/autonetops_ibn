@@ -48,15 +48,27 @@ Planning is **policy**; deployment is **execution**. The planner answers
 - Emits a declarative **Plan** document: ordered steps, canary stages,
   validation checkpoints, abort criteria.
 
-### Deployer (`deployer/`)
+### Orchestrator (`orchestrator/`)
 
-The deployer executes a Plan and nothing else:
+The workflow role (ADR-0010): every long-running process in the loop is a
+Prefect flow — plan rollout, the reconciliation loops that back webhooks
+(ADR-0004), drift remediation, onboarding. Flows decide *sequence and
+reaction*; they never touch devices and never decide what changes.
 
-- Transport adapters (gNMI / NETCONF / SSH / vendor API) isolated per protocol.
-- **Rollback is a first-class concept**: vendor transactional semantics
-  (Junos commit-confirmed, IOS-XR commit replace, EOS checkpoints) live in
-  `deployer/rollback/`, tested independently of workflow logic.
-- Workflows implement canary progression and stop on validation-gate failure.
+### Executor (`executor/`)
+
+The execution-layer role (ADR-0010/0011) — the only component that touches
+the network, across three southbound classes via the **control-point model**:
+direct NOS devices, API vendors, and controllers that manage N devices.
+
+- **Drivers** implement a fixed verb set (get_facts, snapshot, dry_run,
+  apply, confirm, rollback) and declare a **capability matrix** the planner
+  uses to choose rollback/canary strategies.
+- **Rollback is a driver capability**: Junos commit-confirmed, EOS
+  checkpoints, controller revision reverts — tested per driver, never
+  sprinkled through workflow code.
+- Transports (gNMI / NETCONF / SSH / HTTP) are shared primitives drivers
+  compose.
 
 ### Telemetry (`telemetry/`)
 
@@ -84,7 +96,7 @@ invariants before merge.
 
 ## Trust and data-flow boundaries
 
-- Only the **deployer** talks to network devices for writes.
+- Only the **executor** talks to network devices/controllers for writes.
 - Only **telemetry collectors** talk to devices for reads (streaming).
 - Only **Infrahub** stores intent; nothing in this repo invents desired state.
 - The planner and validator are pure functions over data (artifacts, plans,

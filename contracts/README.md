@@ -12,4 +12,4 @@ for drift.
 | Plan | v1 | `planner/src/autonetops_planner/models.py` | `autonetops-planner export-schema` |
 
 Upcoming: expectation artifact (infrahub transform), execution report
-(deployer), compliance report (validator).
+(executor), compliance report (validator).

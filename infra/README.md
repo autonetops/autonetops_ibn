@@ -1,6 +1,6 @@
 # infra/
 
-Deployment of the **platform itself** — Infrahub, planner, deployer, telemetry
+Deployment of the **platform itself** — Infrahub, planner, orchestrator, executor, telemetry
 stack, validator. Networks are configured by this platform; this directory
 configures the platform.
 

@@ -3,7 +3,7 @@
 Terraform for the **platform's own infrastructure**: the projects, networks,
 clusters and base services that Infrahub, Prefect, the telemetry stack and the
 validator run on. (The *network devices* are never touched from here — that is
-the deployer's job, driven by Plans.)
+the executor's job, driven by Plans.)
 
 ## Layout
 

@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from .models import ChangeItem, ChangeSet, DeviceArtifact
+from .models import ChangeItem, ChangeSet, TargetArtifact
 
 
-def _index(artifacts: list[DeviceArtifact]) -> dict[tuple[str, str], DeviceArtifact]:
-    return {(a.device, a.definition): a for a in artifacts}
+def _index(artifacts: list[TargetArtifact]) -> dict[tuple[str, str], TargetArtifact]:
+    return {(a.target, a.definition): a for a in artifacts}
 
 
 def diff_artifacts(
-    base: list[DeviceArtifact],
-    candidate: list[DeviceArtifact],
+    base: list[TargetArtifact],
+    candidate: list[TargetArtifact],
     base_branch: str,
     candidate_branch: str,
 ) -> ChangeSet:
@@ -27,7 +27,8 @@ def diff_artifacts(
         assert meta is not None
         items.append(
             ChangeItem(
-                device=key[0],
+                target=key[0],
+                kind=meta.kind,
                 definition=key[1],
                 checksum_before=before.checksum if before else None,
                 checksum_after=after.checksum if after else None,
@@ -35,6 +36,7 @@ def diff_artifacts(
                 platform=meta.platform,
                 role=meta.role,
                 region=meta.region,
+                affected_devices=meta.affected_devices,
             )
         )
 

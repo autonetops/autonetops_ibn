@@ -17,7 +17,7 @@ from .models import BlastRadiusClass
 
 @dataclass
 class CanaryStage:
-    select: str  # "one_device" | "one_per_role" | "remainder"
+    select: str  # "one_target" | "one_per_role" | "remainder" (targets = control points)
     soak_minutes: int = 0
     gate: str = "validator.expectations_pass"
 
@@ -32,10 +32,10 @@ class CanaryStrategy:
 
 DEFAULT_STRATEGIES = [
     CanaryStrategy(
-        name="builtin-single-device-canary",
+        name="builtin-single-target-canary",
         applies_to=[BlastRadiusClass.LOW, BlastRadiusClass.MODERATE],
         stages=[
-            CanaryStage(select="one_device", soak_minutes=30),
+            CanaryStage(select="one_target", soak_minutes=30),
             CanaryStage(select="remainder", soak_minutes=0),
         ],
     ),
@@ -43,7 +43,7 @@ DEFAULT_STRATEGIES = [
         name="builtin-high-blast-radius",
         applies_to=[BlastRadiusClass.HIGH],
         stages=[
-            CanaryStage(select="one_device", soak_minutes=60),
+            CanaryStage(select="one_target", soak_minutes=60),
             CanaryStage(select="one_per_role", soak_minutes=60),
             CanaryStage(select="remainder", soak_minutes=0),
         ],

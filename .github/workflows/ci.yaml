@@ -4,10 +4,10 @@
 #   1. schema-validate   — Infrahub schema files load cleanly
 #   2. policy-validate   — planner/policies YAML conforms to policy schema
 #   3. golden-tests      — transforms/templates render pinned outputs (infrahub/tests/golden)
-#   4. unit-tests        — planner / deployer / validator
+#   4. unit-tests        — planner / orchestrator / executor / validator
 #   5. simulation-gate   — golden topologies pass expectation checks (nightly + on-demand)
 #
-# Path-filtered so intent-pipeline changes don't run deployer tests and vice versa.
+# Path-filtered so intent-pipeline changes don't run executor tests and vice versa.
 name: ci
 
 on:

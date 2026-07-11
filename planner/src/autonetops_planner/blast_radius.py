@@ -1,5 +1,9 @@
 """Blast radius computation and classification.
 
+Devices, not targets, are the unit of blast radius (ADR-0011): a single
+controller step touching 40 leaves is a 40-device change and must hit the
+approval bar accordingly.
+
 Thresholds are deliberately conservative defaults; they will move into
 planner/policies/ once the policy schema settles.
 """
@@ -19,9 +23,11 @@ class Thresholds:
 
 
 def compute_blast_radius(changes: ChangeSet, thresholds: Thresholds = Thresholds()) -> BlastRadius:
-    devices = sorted({i.device for i in changes.deployable})
-    roles = sorted({i.role for i in changes.deployable if i.role})
-    regions = sorted({i.region for i in changes.deployable if i.region})
+    deployable = changes.deployable
+    devices = sorted({d for i in deployable for d in i.effective_devices})
+    control_points = sorted({i.target for i in deployable})
+    roles = sorted({i.role for i in deployable if i.role})
+    regions = sorted({i.region for i in deployable if i.region})
 
     if len(devices) >= thresholds.high_min_devices or len(regions) >= thresholds.high_min_regions:
         classification = BlastRadiusClass.HIGH
@@ -34,6 +40,7 @@ def compute_blast_radius(changes: ChangeSet, thresholds: Thresholds = Thresholds
         classification=classification,
         device_count=len(devices),
         devices=devices,
+        control_points=control_points,
         roles=roles,
         regions=regions,
     )

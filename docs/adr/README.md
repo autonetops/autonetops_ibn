@@ -29,7 +29,9 @@ history / reasoning that shaped it.
 | 0006 | Telemetry collection: gnmic primary, telegraf for legacy gaps | accepted |
 | 0007 | Python as the platform implementation language | accepted |
 | 0008 | Device interaction: typed per-transport libraries, not a runner framework | accepted |
-| 0009 | Deployer split: two packages now, executor service later if needed | accepted |
+| 0009 | Deployer split: two packages now, executor service later if needed | accepted, refined by 0010 |
+| 0010 | Orchestrator and executor are first-class components (NAF alignment) | accepted |
+| 0011 | Southbound target model: control points and driver capabilities | accepted |
 
 ## Backlog (decisions we know we owe)
 
