@@ -10,8 +10,9 @@
 4. Artifacts regenerate on the branch: configs + expectations.
 5. **Planner** diffs branch artifacts vs. deployed state → Plan with blast
    radius annotation. High blast radius ⇒ higher approval bar.
-6. Proposed change is merged; the Plan is approved (process TBD — see ADR
-   backlog) and handed to the **orchestrator**.
+6. Proposed change is merged; the Plan is approved — plan review per
+   ADR-0003, or unattended when the diff matches a pre-approved change class
+   (ADR-0014) — and handed to the **orchestrator**.
 7. The deploy flow executes canary stage 1 via the executor → validator gates
    → next stage → … done.
 8. Validator confirms expectations; compliance status lands back in Infrahub.

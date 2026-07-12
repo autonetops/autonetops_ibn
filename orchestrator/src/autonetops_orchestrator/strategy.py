@@ -33,6 +33,7 @@ class Decision(BaseModel):
     starts_at: datetime.datetime | None = None
     priority: str = "medium"
     emergency_override: bool = False
+    pre_approved_class: str | None = None  # ADR-0014: audit, not authority
 
 
 def decide(
@@ -49,9 +50,25 @@ def decide(
         if strategy.name == plan.policy_evaluation.canary_strategy:
             approvals = list(strategy.requires_approvals)
 
+    # Pre-approved change class (ADR-0014): the class review IS the approval,
+    # so the per-plan bar drops to zero. Never combined with emergency - an
+    # override must always carry names. Dispatch re-verifies the claim from
+    # the frozen bytes before honoring the empty list.
+    pre = getattr(plan.policy_evaluation, "pre_approved", None)
+    if pre is not None and emergency:
+        pre = None
+    if pre is not None:
+        approvals = []
+
     # every branch below overwrites mode; "blocked" is the safe default
     decision = Decision(mode="blocked", priority=priority,
-                        approvals_required=approvals)
+                        approvals_required=approvals,
+                        pre_approved_class=pre.class_name if pre else None)
+    if pre is not None:
+        decision.reasons.append(
+            f"pre-approved by change class {pre.class_name!r} "
+            f"(policy v{pre.policy_version}); per-plan approval waived (ADR-0014)"
+        )
 
     if not timeline.feasible:
         decision.mode = "blocked"

@@ -11,6 +11,7 @@ from .models import (
     Plan,
     PlanSource,
     PolicyEvaluation,
+    PreApproval,
     RollbackSpec,
     Stage,
     Step,
@@ -127,6 +128,7 @@ def build_plan(
     changes: ChangeSet,
     strategy: CanaryStrategy,
     delivery_prefs: dict | None = None,
+    pre_approved: PreApproval | None = None,
 ) -> Plan:
     delivery_prefs = delivery_prefs or DEFAULT_DELIVERY_PREFERENCES
     blast = compute_blast_radius(changes)
@@ -144,10 +146,14 @@ def build_plan(
     ]
 
     return Plan(
+        # pre_approved is metadata, not rollout content: the id hashes only
+        # source + stages, so the same diff keeps the same id either way
         id=Plan.deterministic_id(source, stages),
         source=source,
         blast_radius=blast,
-        policy_evaluation=PolicyEvaluation(canary_strategy=strategy.name),
+        policy_evaluation=PolicyEvaluation(
+            canary_strategy=strategy.name, pre_approved=pre_approved
+        ),
         stages=stages,
         removed_targets=sorted({i.target for i in changes.removed}),
         abort_criteria=list(DEFAULT_ABORT_CRITERIA),

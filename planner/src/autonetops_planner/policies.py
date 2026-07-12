@@ -94,6 +94,15 @@ def select_strategy(
     raise LookupError(f"no canary strategy applies to blast radius {classification.value!r}")
 
 
+def strategy_by_name(strategies: list[CanaryStrategy], name: str) -> CanaryStrategy:
+    """A change class naming a missing strategy is a policy bug: fail loudly
+    (ADR-0014), never fall back silently to a different rollout shape."""
+    for strategy in strategies:
+        if strategy.name == name:
+            return strategy
+    raise LookupError(f"no canary strategy named {name!r}")
+
+
 # -- delivery preferences (ADR-0012) -----------------------------------------
 #
 # Two axes decide the protocol:

@@ -47,6 +47,10 @@ nodes:
       - name: emergency_override
         kind: Boolean
         default_value: false
+      - name: pre_approved_class
+        kind: Text
+        optional: true
+        description: Change class that auto-approved this plan (ADR-0014); empty = human-approved
       - name: detail
         kind: TextArea
         optional: true

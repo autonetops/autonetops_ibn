@@ -21,6 +21,7 @@ from autonetops_executor import get_driver_class, run_step
 from autonetops_validator import ExpectationSet, evaluate_sessions, failing_keys
 
 from .strategy import Decision
+from .timeline import PER_STEP_MINUTES
 from .windows import ChangeWindow, next_slot
 
 
@@ -223,7 +224,11 @@ def _dispatch_stages(
         #    from planning time - windows are data and data changes.
         if not (options.override_windows or decision.emergency_override or options.check):
             now = now_fn()
+            # need_minutes closes the "window open but too short to finish the
+            # stage" gap: the fit is re-checked with the same duration estimate
+            # the timeline used, not just openness.
             slot = next_slot(windows, set(devices), blast, now,
+                             need_minutes=max(len(stage.steps) * PER_STEP_MINUTES, 1),
                              horizon_days=options.horizon_days)
             if slot is None:
                 report.aborted = (f"stage {stage.name!r}: no eligible window "

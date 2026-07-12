@@ -25,18 +25,21 @@ import yaml
 
 from autonetops_executor.inventory import SotInventory
 from autonetops_planner.blast_radius import compute_blast_radius
+from autonetops_planner.change_classes import classify_changes, load_change_classes
 from autonetops_planner.diffing import diff_artifacts
-from autonetops_planner.models import Plan
+from autonetops_planner.models import Plan, PreApproval
 from autonetops_planner.plan_builder import build_plan
 from autonetops_planner.policies import (
     load_canary_strategies,
     load_delivery_preferences,
     select_strategy,
+    strategy_by_name,
 )
 from autonetops_validator import ExpectationSet
 
 from .dispatch import DispatchOptions, dispatch_plan, write_report
 from .feedback import record_dispatch
+from .preapproval import recent_pre_approved, tighten_approvals
 from .priority import intent_priority_for
 from .render_source import RenderedArtifactSource
 from .strategy import Decision, apply_to_plan, decide
@@ -47,6 +50,12 @@ app = typer.Typer(help=__doc__, no_args_is_help=True)
 
 DEFAULT_REPO = Path(os.environ.get("IBN_SOT_REPO", "/root/autonetops_infrahub"))
 DEFAULT_PLANS_DIR = Path(os.environ.get("IBN_PLANS_DIR", "plans"))
+# One policy source for plan AND dispatch: classification at plan time and
+# re-verification at dispatch time must read the same reviewed data, or every
+# pre-approval claim fails its re-check (ADR-0014).
+DEFAULT_POLICIES_DIR: Optional[Path] = (
+    Path(os.environ["IBN_POLICIES_DIR"]) if os.environ.get("IBN_POLICIES_DIR") else None
+)
 
 
 def _client(url: str, token: str):
@@ -112,8 +121,51 @@ def _build(
 
     strategies = load_canary_strategies(policies_dir)
     blast = compute_blast_radius(changes)
-    strategy = select_strategy(strategies, blast.classification)
-    plan = build_plan(changes, strategy, load_delivery_preferences(policies_dir))
+
+    # -- pre-approved change classes (ADR-0014): prove the diff is routine.
+    #    Fail-closed: unfetchable bytes, emergency, or a spent rate limit all
+    #    fall back to the normal approval path. Fetched pairs are cached so
+    #    the base bytes can be frozen into the bundle below without a re-fetch.
+    class_policy = load_change_classes(policies_dir)
+    content_cache: dict[tuple[str, str], tuple[str, str]] = {}
+    pre = None
+    if class_policy.classes and not emergency:
+        base_by_key = {(a.target, a.definition): a for a in base_artifacts}
+        cand_by_key = {(a.target, a.definition): a for a in candidate_artifacts}
+
+        def pair_for(item):
+            key = (item.target, item.definition)
+            if key in content_cache:
+                return content_cache[key]
+            before_art, after_art = base_by_key.get(key), cand_by_key.get(key)
+            if before_art is None or after_art is None:
+                return None
+            try:
+                pair = (source.fetch_content(before_art, branch=base),
+                        source.fetch_content(after_art, branch=candidate))
+            except Exception:  # noqa: BLE001 - unfetchable bytes fail closed
+                return None
+            content_cache[key] = pair
+            return pair
+
+        pre = classify_changes(changes, blast.classification, class_policy, pair_for)
+        if pre and pre.change_class.max_plans_per_hour is not None:
+            recent = recent_pre_approved(plans_dir, pre.change_class.name, now)
+            if recent >= pre.change_class.max_plans_per_hour:
+                typer.echo(
+                    f"change class {pre.change_class.name!r} rate limit reached "
+                    f"({recent} plan(s) in the last hour); normal approval path")
+                pre = None
+
+    if pre and pre.change_class.canary_strategy:
+        strategy = strategy_by_name(strategies, pre.change_class.canary_strategy)
+    else:
+        strategy = select_strategy(strategies, blast.classification)
+    plan = build_plan(
+        changes, strategy, load_delivery_preferences(policies_dir),
+        pre_approved=(PreApproval(class_name=pre.change_class.name,
+                                  policy_version=pre.policy_version)
+                      if pre else None))
     plan.created_at = now.isoformat(timespec="seconds")
 
     windows = load_windows(client)
@@ -145,11 +197,25 @@ def _build(
     for contract, text in source.render_expectations(candidate).items():
         (plan_dir / "expectations" / f"{contract}.yml").write_text(text)
 
+    # pre-approved plans also freeze the BASE bytes: dispatch re-derives the
+    # classification from the bundle alone (ADR-0014) - the branches may be
+    # gone, and decision.yaml is not integrity-protected
+    if plan.policy_evaluation.pre_approved:
+        (plan_dir / "content_base").mkdir(exist_ok=True)
+        for stage in plan.stages:
+            for step in stage.steps:
+                key = (step.target.control_point, step.artifact_definition)
+                name = f"{key[0]}__{key[1]}.cfg"
+                (plan_dir / "content_base" / name).write_text(content_cache[key][0])
+
     # -- human summary ---------------------------------------------------
     typer.echo(f"\nplan {plan.id}")
     typer.echo(f"  blast radius : {blast.classification.value} "
                f"({blast.device_count} devices: {', '.join(blast.devices)})")
     typer.echo(f"  strategy     : {strategy.name}")
+    if pre:
+        typer.echo(f"  pre-approved : change class {pre.change_class.name!r} "
+                   f"(policy v{pre.policy_version})")
     typer.echo(f"  priority     : {priority}" +
                (f" (from {', '.join(intents)})" if intents else ""))
     for entry in timeline.entries:
@@ -172,7 +238,7 @@ def plan_command(
     candidate: str = typer.Option(..., help="Candidate Infrahub branch"),
     base: str = typer.Option("main", help="Base (deployed) branch"),
     repo: Path = typer.Option(DEFAULT_REPO, help="SoT repo checkout (queries/ + transforms/)"),
-    policies_dir: Optional[Path] = typer.Option(None, help="Planner policy YAML dir"),
+    policies_dir: Optional[Path] = typer.Option(DEFAULT_POLICIES_DIR, help="Planner policy YAML dir"),
     plans_dir: Path = typer.Option(DEFAULT_PLANS_DIR),
     at: Optional[str] = typer.Option(None, help="Evaluate timeline as if now were this ISO time"),
     emergency: bool = typer.Option(False, help="Record an emergency override (critical intents only)"),
@@ -188,10 +254,26 @@ def _dispatch(
     plan_dir: Path, check: bool, override_windows: bool, wait: bool,
     soak_scale: float, approvals: list[str],
     infrahub_url: str, infrahub_token: str, username: str, password: str,
+    policies_dir: Optional[Path] = None,
 ) -> int:
     plan = Plan.model_validate(yaml.safe_load((plan_dir / "plan.yaml").read_text()))
     decision = Decision.model_validate(
         yaml.safe_load((plan_dir / "decision.yaml").read_text()))
+
+    # -- the approval bar can only tighten at dispatch time (ADR-0014 §5):
+    #    decision.yaml is not integrity-protected, so a pre-approval claim is
+    #    re-derived from the frozen bundle bytes and anything else is raised
+    #    to the strategy floor before a single verb runs.
+    required, notes, claim_verified = tighten_approvals(
+        plan, decision, plan_dir,
+        load_change_classes(policies_dir), load_canary_strategies(policies_dir))
+    for note in notes:
+        typer.echo(f"approval bar: {note}")
+    decision.approvals_required = required
+    if claim_verified is False:
+        # a failed claim must not reach the audit trail as an auto-approval:
+        # whatever happens next was human-approved (or aborted), not the class
+        decision.pre_approved_class = None
 
     client = _client(infrahub_url, infrahub_token)
     windows = load_windows(client)
@@ -249,6 +331,11 @@ def _dispatch(
     if report.waiting:
         typer.echo("\nstopped: waiting on a window/manual gate (nothing failed)")
         return 3
+    if report.aborted and report.aborted.startswith("missing approvals"):
+        # 4 = approvals, not failure: watch holds the plan instead of
+        # dead-ending it (nothing ran, nothing broke)
+        typer.echo(f"\naborted: {report.aborted}")
+        return 4
     if report.aborted:
         typer.echo(f"\naborted: {report.aborted}")
         return 2
@@ -266,6 +353,8 @@ def dispatch_command(
     soak_scale: float = typer.Option(
         1.0, help="Multiply soak times (0.01 turns 30m into 18s for demos)"),
     approve: list[str] = typer.Option([], help="Approval name (repeatable)"),
+    policies_dir: Optional[Path] = typer.Option(
+        DEFAULT_POLICIES_DIR, help="Planner policy YAML dir (approval floor + change classes)"),
     infrahub_url: str = InfrahubUrl,
     infrahub_token: str = InfrahubToken,
     username: str = typer.Option("admin", envvar="IBN_USERNAME"),
@@ -274,7 +363,8 @@ def dispatch_command(
     """Execute a saved plan; windows are re-checked at execution time."""
     raise typer.Exit(_dispatch(plan_dir, check, override_windows, wait,
                                soak_scale, approve,
-                               infrahub_url, infrahub_token, username, password))
+                               infrahub_url, infrahub_token, username, password,
+                               policies_dir=policies_dir))
 
 
 @app.command("run")
@@ -282,7 +372,7 @@ def run_command(
     candidate: str = typer.Option(..., help="Candidate Infrahub branch"),
     base: str = typer.Option("main"),
     repo: Path = typer.Option(DEFAULT_REPO),
-    policies_dir: Optional[Path] = typer.Option(None),
+    policies_dir: Optional[Path] = typer.Option(DEFAULT_POLICIES_DIR),
     plans_dir: Path = typer.Option(DEFAULT_PLANS_DIR),
     check: bool = typer.Option(False, "--check"),
     override_windows: bool = typer.Option(False),
@@ -303,7 +393,8 @@ def run_command(
         raise typer.Exit(0)
     raise typer.Exit(_dispatch(plan_dir, check, override_windows, wait,
                                soak_scale, approve,
-                               infrahub_url, infrahub_token, username, password))
+                               infrahub_url, infrahub_token, username, password,
+                               policies_dir=policies_dir))
 
 
 @app.command("watch")
@@ -314,6 +405,9 @@ def watch_command(
         True, help="Dispatch plans when their proposed change merges"),
     repo: Path = typer.Option(DEFAULT_REPO),
     plans_dir: Path = typer.Option(DEFAULT_PLANS_DIR),
+    policies_dir: Optional[Path] = typer.Option(
+        DEFAULT_POLICIES_DIR, help="Planner policy YAML dir - custom strategies and "
+                   "pre-approved change classes apply in the automated path"),
     soak_scale: float = typer.Option(1.0),
     infrahub_url: str = InfrahubUrl,
     infrahub_token: str = InfrahubToken,
@@ -326,11 +420,12 @@ def watch_command(
     watch_loop(
         client=_client(infrahub_url, infrahub_token),
         plan_fn=lambda branch: _build(
-            "main", branch, repo, None, plans_dir, None, False,
+            "main", branch, repo, policies_dir, plans_dir, None, False,
             infrahub_url, infrahub_token),
         dispatch_fn=lambda plan_dir: _dispatch(
             plan_dir, False, False, False, soak_scale, [],
-            infrahub_url, infrahub_token, username, password),
+            infrahub_url, infrahub_token, username, password,
+            policies_dir=policies_dir),
         plans_dir=plans_dir,
         interval=interval,
         once=once,

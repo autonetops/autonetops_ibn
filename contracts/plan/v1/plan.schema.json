@@ -136,6 +136,17 @@
           "title": "Change Window",
           "type": "string"
         },
+        "pre_approved": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreApproval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "rate_limits": {
           "default": "not_evaluated",
           "title": "Rate Limits",
@@ -146,6 +157,25 @@
         "canary_strategy"
       ],
       "title": "PolicyEvaluation",
+      "type": "object"
+    },
+    "PreApproval": {
+      "description": "The whole diff falls inside a reviewed pre-approved change class\n(ADR-0014). Waives the per-plan human approval step ONLY; windows and\nstage gates apply unchanged. Re-verified at dispatch from the frozen\ncontent \u2014 the recorded claim can only ever be tightened, never trusted.",
+      "properties": {
+        "class": {
+          "title": "Class",
+          "type": "string"
+        },
+        "policy_version": {
+          "title": "Policy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "policy_version"
+      ],
+      "title": "PreApproval",
       "type": "object"
     },
     "RollbackSpec": {

@@ -170,10 +170,23 @@ class BlastRadius(BaseModel):
     regions: list[str] = Field(default_factory=list)
 
 
+class PreApproval(BaseModel):
+    """The whole diff falls inside a reviewed pre-approved change class
+    (ADR-0014). Waives the per-plan human approval step ONLY; windows and
+    stage gates apply unchanged. Re-verified at dispatch from the frozen
+    content — the recorded claim can only ever be tightened, never trusted."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    class_name: str = Field(alias="class")
+    policy_version: str
+
+
 class PolicyEvaluation(BaseModel):
     canary_strategy: str
     change_window: str = "not_evaluated"
     rate_limits: str = "not_evaluated"
+    pre_approved: PreApproval | None = None
 
 
 class PlanSource(BaseModel):

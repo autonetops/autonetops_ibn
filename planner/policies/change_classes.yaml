@@ -1,0 +1,36 @@
+# Pre-approved change classes (ADR-0014) — reviewed policy data.
+#
+# A plan whose ENTIRE diff falls inside one enabled class carries no per-plan
+# approval requirement: the review happened here, on the class definition.
+# CODEOWNERS maps this file to rollout approvers on purpose — editing it IS
+# the approval act. Fail-closed: anything unmatched, added, removed, over the
+# blast ceiling, or rate-limited takes the normal approval path.
+#
+# Pre-approval waives the human plan-review step ONLY. Change windows, stage
+# gates, evidence and SoT feedback apply unchanged, and the classification is
+# re-derived from the frozen plan bytes at dispatch time.
+#
+# Matchers per content format:
+#   cli-text:         every added/removed diff line must match an allow regex
+#   openconfig-json:  every changed model path must match an allow pattern
+#                     ([*] = any list key, * = any single segment)
+# Formats without a matcher implementation (ietf-xml) never match.
+---
+version: 1
+classes:
+  - name: interface-descriptions
+    enabled: true
+    description: Only interface description lines change; nothing else.
+    applies_to:
+      artifact_definitions: [device-configuration]
+    match:
+      cli-text:
+        changed_lines_allow:
+          - '^\s*interface \S+$'          # section context re-emitted by renderers
+          - '^\s*description .+$'
+      openconfig-json:
+        paths_allow:
+          - /interfaces/interface[*]/config/description
+    max_blast_radius: high                # descriptions are safe at any fan-out;
+    rate_limit:                           # the rate limit still applies
+      max_plans_per_hour: 10
