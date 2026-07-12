@@ -35,6 +35,7 @@ history / reasoning that shaped it.
 | 0012 | Protocol preference order for delivery strategy selection | accepted |
 | 0013 | Orchestrator flow: SoT change windows, timeline evaluation, dispatch decision | accepted |
 | 0014 | Pre-approved plan classes: auto-approval as reviewed policy | accepted |
+| 0015 | Intent vocabulary: contracts, policies, invariants | proposed |
 
 ## Backlog (decisions we know we owe)
 

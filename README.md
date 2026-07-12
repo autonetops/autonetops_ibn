@@ -77,7 +77,13 @@ autonetops_ibn/
 ## Where to start
 
 - New to the project → `docs/architecture/overview.md`
+- The words this project is built on (intent, contract, policy, invariant) →
+  `docs/architecture/intent-model.md`
 - Understanding component boundaries → `docs/architecture/component-contracts.md`
+- How a rollout Plan lives (compiled → approved → gated → executed) →
+  `docs/architecture/plan-lifecycle.md`
+- How to run it (Prefect vs CI, executor placement, triggers, queues) →
+  `docs/architecture/runtime-topology.md`
 - Why things are the way they are → `docs/adr/`
 - Operating the system → `docs/runbooks/`
 
