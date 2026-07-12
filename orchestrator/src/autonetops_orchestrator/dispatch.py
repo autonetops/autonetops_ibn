@@ -238,7 +238,7 @@ def dispatch_plan(
 
         # -- gate: soak, then compare expectations against live facts
         if options.check:
-            echo(f"  gate: skipped (--check)")
+            echo("  gate: skipped (--check)")
             continue
         gate = stage.gate
         if gate.kind != "validator.expectations_pass":

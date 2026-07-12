@@ -39,8 +39,8 @@ from .dispatch import DispatchOptions, dispatch_plan
 from .priority import intent_priority_for
 from .render_source import RenderedArtifactSource
 from .strategy import Decision, apply_to_plan, decide
-from .timeline import Timeline, evaluate_timeline
-from .windows import load_windows, next_slot
+from .timeline import evaluate_timeline
+from .windows import load_windows
 
 app = typer.Typer(help=__doc__, no_args_is_help=True)
 
