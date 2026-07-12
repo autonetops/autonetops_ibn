@@ -132,11 +132,14 @@ def _build(
     _dump(plan_dir / "timeline.yaml", timeline)
     _dump(plan_dir / "decision.yaml", decision)
 
-    by_target = {a.target: a for a in candidate_artifacts}
+    # one file per (target, definition): a target carrying two artifact
+    # definitions (device-config + telemetry-subs) must not overwrite itself
+    by_key = {(a.target, a.definition): a for a in candidate_artifacts}
     for stage in plan.stages:
         for step in stage.steps:
-            artifact = by_target[step.target.control_point]
-            (plan_dir / "content" / f"{artifact.target}.cfg").write_text(
+            artifact = by_key[(step.target.control_point, step.artifact_definition)]
+            name = f"{artifact.target}__{artifact.definition}.cfg"
+            (plan_dir / "content" / name).write_text(
                 source.fetch_content(artifact, branch=candidate))
     for contract, text in source.render_expectations(candidate).items():
         (plan_dir / "expectations" / f"{contract}.yml").write_text(text)
@@ -206,10 +209,15 @@ def _dispatch(
             fh.write(json.dumps(payload) + "\n")
 
     def content_for(step) -> str:
-        path = plan_dir / "content" / f"{step.target.control_point}.cfg"
-        if not path.exists():
-            raise KeyError(f"no saved content for {step.target.control_point!r}")
-        return path.read_text()
+        target = step.target.control_point
+        candidates = (
+            plan_dir / "content" / f"{target}__{step.artifact_definition}.cfg",
+            plan_dir / "content" / f"{target}.cfg",  # pre-definition-suffix plans
+        )
+        for path in candidates:
+            if path.exists():
+                return path.read_text()
+        raise KeyError(f"no saved content for {target!r}")
 
     typer.echo(f"plan {plan.id} ({plan.source.base_branch} -> "
                f"{plan.source.candidate_branch})")
@@ -227,6 +235,7 @@ def _dispatch(
             check=check, override_windows=override_windows, wait=wait,
             soak_scale=soak_scale, approvals=tuple(approvals),
         ),
+        driver_for=inventory.driver_for,
     )
 
     if report.waiting:

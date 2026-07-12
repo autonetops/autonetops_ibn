@@ -81,6 +81,14 @@ def watch_loop(
 
             elif pc_state == "merged" and not record.get("dispatched"):
                 plan_dir = record.get("plan_dir")
+                if plan_dir and not auto_dispatch:
+                    # dispatch stays manual; announce once, keep undispatched
+                    if not record.get("manual_hold"):
+                        echo(f"[watch] {name!r} merged; auto-dispatch is off - "
+                             f"run `ibn-orchestrate dispatch --plan-dir {plan_dir}`")
+                        record["manual_hold"] = True
+                        _save_state(state_path, state)
+                    continue
                 if plan_dir is None and "plan_dir" not in record:
                     # merged before we ever saw it open: plan from main vs
                     # itself is empty, so note it and move on - the change

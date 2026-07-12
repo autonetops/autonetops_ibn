@@ -62,13 +62,20 @@ def collect_facts(
     driver_by_device: dict[str, str],
     connection_for: Callable[[str], dict[str, Any]],
     emit: Callable[[Any], None],
+    driver_for: Callable[[str], str | None] | None = None,
 ) -> dict[str, dict[str, Any] | None]:
     """Per-device facts through the executor verb contract; None marks a
     device nobody could observe (no driver, unreachable) - the validator
-    reports those as unverifiable, never as passing."""
+    reports those as unverifiable, never as passing.
+
+    ``driver_for`` resolves drivers for devices OUTSIDE the plan (a CE-only
+    plan is proven on unchanged PEs, which have no plan step to borrow a
+    driver from) - typically SotInventory.driver_for."""
     facts: dict[str, dict[str, Any] | None] = {}
     for device in devices:
         driver_name = driver_by_device.get(device)
+        if not driver_name and driver_for is not None:
+            driver_name = driver_for(device)
         if not driver_name:
             facts[device] = None
             continue
@@ -97,6 +104,7 @@ def dispatch_plan(
     options: DispatchOptions,
     now_fn: Callable[[], datetime.datetime] = _utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
+    driver_for: Callable[[str], str | None] | None = None,
 ) -> DispatchReport:
     report = DispatchReport(plan_id=plan.id)
     blast = plan.blast_radius.classification.value
@@ -131,7 +139,8 @@ def dispatch_plan(
     baseline_scope = expectations.for_devices(plan_devices, include_neighbors=True)
     if baseline_scope.sessions and not options.check:
         observe = sorted({s.device for s in baseline_scope.sessions})
-        facts = collect_facts(observe, plan_drivers, connection_for, emit)
+        facts = collect_facts(observe, plan_drivers, connection_for, emit,
+                              driver_for=driver_for)
         before = evaluate_sessions(baseline_scope, facts)
         baseline = failing_keys(before)
         emit({"operation": "gate_baseline", "target": plan.id,
@@ -211,6 +220,14 @@ def dispatch_plan(
                      f"(snapshot {outcome.snapshot_id})")
             elif outcome.status == "converged":
                 echo(f"{prefix} no diff - already converged")
+            elif outcome.status == "rollback_failed":
+                # device state UNKNOWN: aborting is not optional and
+                # abort_on_failure does not apply
+                report.failures += 1
+                report.aborted = f"step {target} rollback_failed: {outcome.detail}"
+                echo(f"{prefix} ROLLBACK_FAILED: {outcome.detail}")
+                echo("  device state unknown - aborting plan, page a human")
+                return report
             else:
                 echo(f"{prefix} {outcome.status.upper()}: {outcome.detail}")
                 report.failures += 1
@@ -240,12 +257,26 @@ def dispatch_plan(
                  f"(soak {gate.soak_minutes}m x scale {options.soak_scale})")
             sleep_fn(soak_seconds)
         observe = sorted({s.device for s in scoped.sessions})
-        facts = collect_facts(observe, plan_drivers, connection_for, emit)
+        facts = collect_facts(observe, plan_drivers, connection_for, emit,
+                              driver_for=driver_for)
         result = evaluate_sessions(scoped, facts, baseline=baseline)
-        stage_report.gate_passed = result.passed
+        gate_passed = result.passed
+        # Observability regression: a device we just CHANGED that nobody can
+        # observe anymore is a failure, not a shrug - the change may have cut
+        # off management. Unverifiable elsewhere stays reported-not-blocking.
+        if applied_any:
+            blind_changed = sorted({
+                c.device for c in result.checks
+                if c.status == "unverifiable" and c.device in devices
+            })
+            if blind_changed:
+                gate_passed = False
+                echo(f"  gate: changed device(s) unobservable after apply: "
+                     f"{', '.join(blind_changed)}")
+        stage_report.gate_passed = gate_passed
         stage_report.gate_summary = result.summary
         emit({"operation": "gate", "target": stage.name,
-              "success": result.passed,
+              "success": gate_passed,
               "detail": {"checks": [c.model_dump() for c in result.checks]}})
         markers = {"pass": "ok", "fail": "FAIL",
                    "pre_existing": "pre", "unverifiable": "??"}
@@ -254,7 +285,7 @@ def dispatch_plan(
                  f"{check.neighbor_ip} ({check.contract}): "
                  f"{check.actual or 'unobserved'}")
         echo(f"  gate: {result.summary}")
-        if not result.passed:
+        if not gate_passed:
             report.aborted = (f"gate failed after {stage.name}: {result.summary}; "
                               f"snapshots are on the devices for manual revert")
             echo(f"ABORT: {report.aborted}")

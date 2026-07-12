@@ -214,3 +214,86 @@ def test_soak_is_scaled(monkeypatch):
                              sleeps=sleeps)
     assert report.ok
     assert sleeps == [30 * 60 * 0.01]
+
+
+def test_rollback_failed_always_aborts(monkeypatch):
+    # apply blows up AND the revert blows up: device state unknown - the plan
+    # must abort even though abort_on_failure semantics never enter into it
+    def bad_apply(self, artifact):
+        raise RuntimeError("commit rejected")
+
+    def bad_rollback(self, reference):
+        raise ConnectionError("unreachable mid-revert")
+
+    monkeypatch.setattr(MockDriver, "apply", bad_apply)
+    monkeypatch.setattr(MockDriver, "rollback", bad_rollback)
+    plan = _plan()
+    for stage in plan.stages:
+        for step in stage.steps:
+            step.abort_on_failure = False  # even so: rollback_failed aborts
+    report, log, _ = _dispatch(plan)
+    assert report.aborted and "rollback_failed" in report.aborted
+    assert len(report.stages) == 1  # stage-2 never ran
+    assert any("unknown" in line.lower() for line in log)
+
+
+def test_gate_blocks_when_changed_device_goes_dark(monkeypatch):
+    # session healthy at baseline; after the canary applies, the changed
+    # device cannot be observed at all (get_facts raises). That is an
+    # observability regression on a device we just touched - gate must fail.
+    original = MockDriver.get_facts
+    calls = {"n": 0}
+
+    def dark_after_apply(self):
+        calls["n"] += 1
+        if calls["n"] == 1:  # baseline pass
+            result = original(self)
+            result.facts["bgp_neighbors"] = {"10.0.0.2": "established"}
+            return result
+        raise ConnectionError("mgmt session lost")
+
+    monkeypatch.setattr(MockDriver, "get_facts", dark_after_apply)
+    report, log, _ = _dispatch(_plan(), expectations=EXPECTATIONS)
+    assert report.aborted and "gate failed" in report.aborted
+    assert report.stages[0].gate_passed is False
+    assert any("unobservable after apply" in line for line in log)
+
+
+def test_gate_uses_driver_for_fallback_for_unchanged_observers(monkeypatch):
+    # expectations observed on a device that is in NO plan step (the
+    # unchanged-PE case): driver_for resolves it, the gate can see it
+    original = MockDriver.get_facts
+
+    def with_bgp(self):
+        result = original(self)
+        result.facts["bgp_neighbors"] = {"10.0.0.9": "established"}
+        return result
+
+    monkeypatch.setattr(MockDriver, "get_facts", with_bgp)
+    expectations = ExpectationSet.from_artifacts(["""\
+apiVersion: expectations.networking.autonetops/v1
+kind: ContractExpectations
+metadata: {name: edge}
+spec:
+  bgp:
+    sessions:
+      - {device: pe-observer, neighborIp: 10.0.0.9, neighborDevice: pe-1,
+         mustBe: {sessionState: established}}
+"""])
+    lookups: list[str] = []
+
+    def driver_for(device: str):
+        lookups.append(device)
+        return "mock"
+
+    report = dispatch_plan(
+        _plan(), Decision(mode="immediate"), windows=[OPEN_WINDOW],
+        connection_for=lambda t: {"initial_config": ""},
+        content_for=lambda s: CONTENT[s.target.control_point],
+        expectations=expectations, emit=lambda r: None, echo=lambda m: None,
+        options=DispatchOptions(), now_fn=lambda: NOW,
+        driver_for=driver_for,
+    )
+    assert report.ok
+    assert "pe-observer" in lookups
+    assert report.stages[0].gate_summary == "1 pass"
