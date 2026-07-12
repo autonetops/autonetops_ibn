@@ -21,7 +21,7 @@ now). The capability matrix and format gating are live and tested.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from ..driver import BaseDriver, register
 from ..exceptions import ChangeNotFound, ExecutorError

@@ -169,13 +169,27 @@ def next_slot(
     slots.sort()
 
     for start, end, window in slots:
+        # every freeze interval overlapping this slot, in time order — the
+        # usable slot is the first inter-freeze gap long enough for `need`
+        # (a freeze in the middle of a window does not kill the time after it)
+        intervals = sorted(
+            (f_start, f_end)
+            for freeze in freezes
+            for f_start, f_end in freeze.occurrences(start, horizon_days)
+            if f_start < end and f_end > start
+        )
         cursor = start
-        for freeze in freezes:
-            for f_start, f_end in freeze.occurrences(cursor, horizon_days):
-                if f_start <= cursor < f_end:  # slot begins inside a freeze
-                    cursor = f_end
-                elif cursor < f_start < end:  # freeze cuts the slot short
-                    end = f_start
-        if cursor < end and end - cursor >= need:
-            return window, cursor, end
+        usable: tuple[datetime.datetime, datetime.datetime] | None = None
+        for f_start, f_end in intervals:
+            if f_start <= cursor:
+                cursor = max(cursor, f_end)
+            elif f_start - cursor >= need:
+                usable = (cursor, f_start)  # gap before this freeze fits
+                break
+            else:
+                cursor = max(cursor, f_end)  # gap too short; skip past freeze
+        if usable is None and cursor < end and end - cursor >= need:
+            usable = (cursor, end)
+        if usable is not None:
+            return window, usable[0], usable[1]
     return None

@@ -113,3 +113,53 @@ def test_need_minutes_skips_too_short_slots():
     now = dt("2026-07-13T09:00:00")  # Monday morning
     window, _start, _end = next_slot([short, long], {"x"}, "low", now, need_minutes=30)
     assert window.name == "long"
+
+
+def test_next_slot_finds_gap_after_mid_window_freeze():
+    """A freeze in the middle of a window must not kill the time after it."""
+    import datetime
+
+    UTC = datetime.timezone.utc
+    window = ChangeWindow(
+        name="nightly", days=("tuesday",), start_utc="01:00",
+        duration_minutes=240, max_blast_radius="high",  # 01:00-05:00
+    )
+    freeze = ChangeWindow(
+        name="mid-freeze", window_type="freeze",
+        starts_at=datetime.datetime(2026, 7, 14, 1, 30, tzinfo=UTC),
+        ends_at=datetime.datetime(2026, 7, 14, 2, 30, tzinfo=UTC),
+    )
+    after = datetime.datetime(2026, 7, 14, 1, 0, tzinfo=UTC)
+    # 90 min does not fit before the freeze (only 30) but fits after it
+    slot = next_slot([window, freeze], set(), "low", after, need_minutes=90)
+    assert slot is not None
+    _, start, end = slot
+    assert start == datetime.datetime(2026, 7, 14, 2, 30, tzinfo=UTC)
+    assert end - start >= datetime.timedelta(minutes=90)
+
+
+def test_next_slot_overlapping_freezes_any_order():
+    """Overlapping freezes must be walked in time order, not list order."""
+    import datetime
+
+    UTC = datetime.timezone.utc
+    window = ChangeWindow(
+        name="nightly", days=("tuesday",), start_utc="01:00",
+        duration_minutes=240, max_blast_radius="high",
+    )
+    f1 = ChangeWindow(
+        name="f1", window_type="freeze",
+        starts_at=datetime.datetime(2026, 7, 14, 1, 0, tzinfo=UTC),
+        ends_at=datetime.datetime(2026, 7, 14, 1, 30, tzinfo=UTC),
+    )
+    f2 = ChangeWindow(
+        name="f2", window_type="freeze",
+        starts_at=datetime.datetime(2026, 7, 14, 1, 20, tzinfo=UTC),
+        ends_at=datetime.datetime(2026, 7, 14, 1, 50, tzinfo=UTC),
+    )
+    after = datetime.datetime(2026, 7, 14, 1, 0, tzinfo=UTC)
+    for freezes in ([f1, f2], [f2, f1]):  # order must not matter
+        slot = next_slot([window, *freezes], set(), "low", after, need_minutes=30)
+        assert slot is not None
+        _, start, _end = slot
+        assert start == datetime.datetime(2026, 7, 14, 1, 50, tzinfo=UTC)

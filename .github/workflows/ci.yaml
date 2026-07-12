@@ -16,33 +16,24 @@ on:
     branches: [main]
 
 jobs:
-  planner:
+  # One job for all platform packages: executor tests build real planner
+  # Steps, orchestrator depends on planner+executor+validator - splitting
+  # per package just re-declares the dependency graph badly.
+  python-packages:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install planner
-        run: pip install -e './planner[dev]'
-      - name: Tests (includes contract-schema drift gate)
-        run: pytest planner/tests -q
+      - name: Install packages (dependency order)
+        run: |
+          pip install -e ./validator -e ./planner -e ./executor
+          pip install -e './orchestrator[dev]'
+      - name: Tests (contract drift gate, verb contract, dispatch, gates)
+        run: pytest planner/tests executor/tests orchestrator/tests validator/tests -q
       - name: Lint
-        run: ruff check planner/src planner/tests
-
-  executor:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install executor
-        run: pip install -e './executor[dev]'
-      - name: Tests (verb contract + no-Prefect boundary)
-        run: pytest executor/tests -q
-      - name: Lint
-        run: ruff check executor/src executor/tests
+        run: ruff check planner executor orchestrator validator tools
 
   scaffold:
     runs-on: ubuntu-latest

@@ -9,6 +9,16 @@ from __future__ import annotations
 
 from typing import Any
 
+# netmiko device_type / platform slug -> executor driver name. The interim
+# capability lookup until SoT capability records land (ADR-0011).
+PLATFORM_DRIVERS: dict[str, str] = {
+    "nokia_srl": "srlinux",
+    "nokia_srlinux": "srlinux",
+    "srlinux": "srlinux",
+    "arista_eos": "eos",
+    "eos": "eos",
+}
+
 DEVICE_QUERY = """
 query Device($name: String!) {
   DcimDevice(name__value: $name) {
@@ -55,6 +65,26 @@ class SotInventory:
             "username": self._username,
             "password": self._password,
         }
+
+    def driver_for(self, control_point: str) -> str | None:
+        """Executor driver for a device that is NOT in the plan (gates observe
+        unchanged neighbors - a CE-only plan is proven on its PEs). None when
+        the SoT has no platform mapping; the caller reports unverifiable."""
+        try:
+            result = self._client.execute_graphql(
+                query=DEVICE_QUERY, variables={"name": control_point}
+            )
+            edges = result["DcimDevice"]["edges"]
+            if not edges:
+                return None
+            platform = (edges[0]["node"].get("platform") or {}).get("node") or {}
+            for key in ("netmiko_device_type", "name"):
+                slug = ((platform.get(key) or {}).get("value") or "").lower()
+                if slug in PLATFORM_DRIVERS:
+                    return PLATFORM_DRIVERS[slug]
+            return None
+        except Exception:  # noqa: BLE001 - unverifiable, not fatal
+            return None
 
     def fetch_content(self, storage_id: str) -> str:
         return self._client.object_store.get(identifier=storage_id)

@@ -23,10 +23,15 @@ EvidenceSink = Callable[[Any], None]
 class StepOutcome:
     """What happened to one step. ``ok`` covers every outcome where the
     network is in a state the plan allows; a skip is NOT ok - nothing was
-    attempted, and silence would read as success."""
+    attempted, and silence would read as success.
+
+    ``rollback_failed`` is the highest-severity outcome: apply failed AND the
+    revert failed, so the device is in an unknown state. Callers must abort
+    the plan and page a human - abort_on_failure does not apply, it is not
+    optional."""
 
     target: str
-    status: str  # applied | converged | checked | skipped | failed | rolled_back
+    status: str  # applied | converged | checked | skipped | failed | rolled_back | rollback_failed
     detail: str = ""
     diff: str = ""
     change_id: str | None = None
@@ -76,13 +81,27 @@ def run_step(
     )
     driver = get_driver_class(step.driver)(target, connection)
 
-    snap = driver.snapshot()
-    emit(snap.evidence)
+    # No exception may escape run_step: a driver/transport blowup mid-plan
+    # must surface as a StepOutcome the caller can reason about, never as a
+    # traceback that kills the dispatch with no report.
+    try:
+        snap = driver.snapshot()
+        emit(snap.evidence)
+    except Exception as exc:  # noqa: BLE001 - nothing touched yet
+        emit({"operation": "snapshot", "target": target,
+              "success": False, "detail": {"error": str(exc)}})
+        return StepOutcome(target, "failed", f"snapshot failed: {exc}")
 
     diff_text = ""
     if driver.capabilities.supports_dry_run:
-        diff = driver.dry_run(artifact)
-        emit(diff.evidence)
+        try:
+            diff = driver.dry_run(artifact)
+            emit(diff.evidence)
+        except Exception as exc:  # noqa: BLE001 - running config untouched
+            emit({"operation": "dry_run", "target": target,
+                  "success": False, "detail": {"error": str(exc)}})
+            return StepOutcome(target, "failed", f"dry_run failed: {exc}",
+                               snapshot_id=snap.snapshot_id)
         if not diff.changed:
             return StepOutcome(target, "converged", "no diff - already converged",
                                snapshot_id=snap.snapshot_id)
@@ -105,7 +124,19 @@ def run_step(
                            change_id=pending.change_id,
                            snapshot_id=snap.snapshot_id)
     except Exception as exc:  # noqa: BLE001 - roll back, report, let caller abort
-        rollback = driver.rollback(snap.snapshot_id)
-        emit(rollback)
+        try:
+            rollback = driver.rollback(snap.snapshot_id)
+            emit(rollback)
+        except Exception as rollback_exc:  # noqa: BLE001 - device state UNKNOWN
+            emit({"operation": "rollback", "target": target,
+                  "success": False,
+                  "detail": {"error": str(rollback_exc),
+                             "apply_error": str(exc),
+                             "snapshot_id": snap.snapshot_id}})
+            return StepOutcome(
+                target, "rollback_failed",
+                f"apply failed ({exc}) AND rollback to {snap.snapshot_id} "
+                f"failed ({rollback_exc}); device state is UNKNOWN",
+                snapshot_id=snap.snapshot_id)
         return StepOutcome(target, "rolled_back", str(exc),
                            snapshot_id=snap.snapshot_id)
