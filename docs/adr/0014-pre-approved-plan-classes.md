@@ -1,6 +1,6 @@
 # 0014 — Pre-approved plan classes: auto-approval as reviewed policy
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-12
 
 ## Context
@@ -53,12 +53,13 @@ cheaply pre-label candidates, but the authoritative classification is A.
    review. Every auto-approved plan cites the class name and the policy
    version (commit) that authorized it.
 
-2. **The planner grows a content-aware classifier**, a new compile stage
-   between diff and strategy selection. It fetches before/after bytes for
-   every changed (target, definition) — `fetch_content` already exists on
-   all three artifact sources and the candidate bytes are already frozen
-   into `content/` at plan time; what is new is a *decision* reading them —
-   and matches the diff against class matchers, per `content_format`:
+2. **The planner grows a content-aware classifier**
+   (`autonetops_planner.change_classes`), a new compile stage between diff
+   and strategy selection; the orchestrator supplies the before/after bytes
+   per changed (target, definition) — `fetch_content` already exists on all
+   three artifact sources and the candidate bytes are already frozen into
+   `content/` at plan time; what is new is a *decision* reading them. The
+   diff is matched against class matchers, per `content_format`:
    - `cli-text`: regex allowlists over added/removed lines of the unified
      diff (renderer context noise accounted for);
    - `openconfig-json` / `ietf-xml`: **model-path allowlists** (e.g.
@@ -94,29 +95,37 @@ cheaply pre-label candidates, but the authoritative classification is A.
 5. **Enforcement points**:
    - `strategy.decide()` consults the classification when computing
      `approvals_required` — the single existing choke point for the decision;
-   - `watch`'s `auto_dispatch` becomes a per-plan predicate: auto-dispatch
-     only when the decision's approvals are satisfied (which for a
-     pre-approved class means empty by policy) — this simultaneously fixes
-     watch dead-ending `needs_approval` plans;
-   - **dispatch re-derives the class from the frozen `content/`** before
-     honoring an empty approvals list. `decision.yaml` has no integrity
-     protection; re-derivation makes tampering pointless — the recorded
-     decision may only ever be *tightened* at dispatch time, never loosened.
+   - dispatch exits with a dedicated code (4) on missing approvals, and
+     `watch` treats it as non-terminal: the plan goes on **approval hold**
+     (announced once, no dispatch hammering) until a manual
+     `dispatch --approve ...` leaves a real outcome behind — this
+     simultaneously fixes watch dead-ending `needs_approval` plans;
+   - **dispatch re-derives the class from the frozen bundle** before
+     honoring an empty approvals list: pre-approved plans freeze the base
+     bytes too (`content_base/`, integrity-anchored by the steps'
+     `checksum_before`), so the claim is re-proven from bytes alone under
+     the *current* policy — which also makes the kill switch effective for
+     already-planned bundles. `decision.yaml` has no integrity protection;
+     re-derivation makes tampering pointless — the recorded decision may
+     only ever be *tightened* at dispatch time, never loosened, and a claim
+     that cannot be checked (unknown strategy, missing bytes) is refused
+     via an un-satisfiable `unverifiable-pre-approval` requirement.
 
 6. **Pre-approval removes exactly one thing: the human plan-review step.**
    Change windows, per-stage validator gates, baseline/soak/unverifiable
    semantics, evidence, `report.yaml` and the `OpsPlanRecord` upsert all
    apply unchanged. A class *may* name its own canary strategy (e.g. a
    no-soak single stage for descriptions) — but only via its own reviewed
-   definition, selected through the same strategy machinery
-   (`select_strategy` widens from blast-class-only keying to
-   blast-class + change-class).
+   definition, resolved by name (`strategy_by_name`) and failing loudly at
+   plan time when the named strategy does not exist.
 
-7. **Guardrails**: per-class rate limits (`max_plans_per_hour`,
-   `max_devices_per_hour`) and a per-class kill switch (`enabled: false` —
-   one reviewed line to halt a class fleet-wide). Every class definition
-   must land with golden tests pinning a diff it matches *and* diffs it must
-   refuse (a description change bundled with an MTU change must not match).
+7. **Guardrails**: a per-class rate limit (`max_plans_per_hour`, counted
+   statelessly from the plan bundles on disk) and a per-class kill switch
+   (`enabled: false` — one reviewed line to halt a class fleet-wide, effective
+   even for already-planned bundles via dispatch re-derivation). Every class
+   definition must land with golden tests pinning a diff it matches *and*
+   diffs it must refuse (a description change bundled with an MTU change must
+   not match) — see `planner/tests/test_change_classes.py`.
 
 Sketch of the policy shape:
 
@@ -138,7 +147,7 @@ classes:
         paths_allow:
           - /interfaces/interface[*]/config/description
     max_blast_radius: high                # safe at any fan-out — rate limit still applies
-    canary_strategy: single-stage-no-soak # optional; must exist in canary_strategies.yaml
+    # canary_strategy: <name>             # optional; must exist in canary_strategies.yaml
     rate_limit:
       max_plans_per_hour: 10
 ```
@@ -158,13 +167,21 @@ weakening any rule.
 - `PolicyEvaluation` gains a field; `contracts/plan/v1/plan.schema.json` is
   regenerated (`autonetops-planner export-schema`) — an additive, non-breaking
   v1 change.
-- `select_strategy()` gains a second selection key; `decide()`, `watch`, and
-  dispatch change as in §5 — including the exit-code/state fix so
-  `needs_approval` is non-terminal under automation.
-- CI must fill the pre-declared `policy-validate` slot
-  (`.github/workflows/ci.yaml` header) to schema-check
-  `change_classes.yaml`, and per-class golden match/refuse tests become
-  mandatory.
+- A class-named canary strategy is resolved via `strategy_by_name`;
+  `decide()`, `watch`, and dispatch change as in §5 — including the new
+  dispatch exit code 4 (missing approvals) so `needs_approval` is
+  non-terminal under automation. `--policies-dir` is plumbed through
+  `dispatch` and `watch` (default: `IBN_POLICIES_DIR` — plan-time
+  classification and dispatch-time re-verification must read the same
+  reviewed data, or every claim fails its re-check), which also lets custom
+  strategies apply in the automated path for the first time.
+- Pre-approved bundles grow a `content_base/` directory (frozen base bytes,
+  anchored by the steps' `checksum_before`) so dispatch re-derivation needs
+  nothing but the bundle and the current policy.
+- The `policy-validate` CI slot (`.github/workflows/ci.yaml` header) is
+  seeded by `test_shipped_policy_file_loads_and_pins_the_descriptions_class`:
+  the committed YAML must parse, compile, and hold its match/refuse boundary;
+  per-class golden match/refuse tests are mandatory.
 - The emergency break-glass template (owed by ADR-0003 in
   `docs/runbooks/emergency-changes.md`) is a *different* mechanism — an
   override with a name on it, not a class — and stays separate.

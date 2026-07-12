@@ -34,7 +34,7 @@ history / reasoning that shaped it.
 | 0011 | Southbound target model: control points and driver capabilities | accepted |
 | 0012 | Protocol preference order for delivery strategy selection | accepted |
 | 0013 | Orchestrator flow: SoT change windows, timeline evaluation, dispatch decision | accepted |
-| 0014 | Pre-approved plan classes: auto-approval as reviewed policy | proposed |
+| 0014 | Pre-approved plan classes: auto-approval as reviewed policy | accepted |
 
 ## Backlog (decisions we know we owe)
 

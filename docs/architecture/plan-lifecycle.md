@@ -23,6 +23,7 @@ by hand, never edited after approval. The unit of storage and review is the
 | `timeline.yaml` | orchestrator | Per-stage window fit: `starts_at` / `ends_by` / `soak_until`, `feasible` flag |
 | `decision.yaml` | orchestrator | Dispatch decision: `mode`, `reasons`, `approvals_required`, `window`, `priority`, `emergency_override` |
 | `content/` | orchestrator | Frozen rendered artifacts, one file per target + definition, checksum-pinned by the plan's steps |
+| `content_base/` | orchestrator | Pre-approved plans only (ADR-0014): frozen *base* bytes, anchored by the steps' `checksum_before`, so dispatch can re-derive the change class from the bundle alone |
 | `expectations/` | orchestrator | Rendered `ContractExpectations`, one per intent contract on the candidate branch |
 | `evidence.jsonl` | dispatch | Append-only record of every executor verb, gate verdict, baseline, override |
 | `report.yaml` | dispatch | Outcome: per-stage results, gate summaries, status (`waiting`, or terminal `succeeded \| failed \| aborted \| checked`) |
@@ -76,24 +77,31 @@ Infrahub proposed change) runs the pipeline
    (`planner/src/autonetops_planner/diffing.py`).
 3. **Blast radius** over affected devices → `low | moderate | high`
    (`blast_radius.py`; ≤2 devices low, ≥10 devices or ≥2 regions high).
-4. **Canary strategy** selected by blast-radius class (`policies.py`).
-   Policy data belongs in `planner/policies/canary_strategies.yaml`, but the
-   file is only read when `--policies-dir` points at it — the default path
-   (and always the `watch` loop) uses the builtin strategies; the shipped
-   file's `strategies: []` also falls back to builtins.
-5. **Stages** partitioned over control points (`one_target` / `one_per_role` /
+4. **Change-class classification** (ADR-0014): when `--policies-dir` supplies
+   change classes and this is not an emergency, fetch before/after bytes per
+   changed pair and prove whether the whole diff sits inside one reviewed
+   pre-approved class (`autonetops_planner.change_classes`); rate limit and
+   kill switch enforced here. Fail-closed — anything unproven takes the
+   normal approval path.
+5. **Canary strategy** selected by blast-radius class (`policies.py`), or
+   named by the matched change class (`strategy_by_name`, loud on a missing
+   name). Policy data belongs in `planner/policies/canary_strategies.yaml`,
+   but the file is only read when `--policies-dir` points at it — the default
+   path uses the builtin strategies; the shipped file's `strategies: []` also
+   falls back to builtins.
+6. **Stages** partitioned over control points (`one_target` / `one_per_role` /
    `remainder`), each with a validation gate; a trailing remainder is
    auto-appended so no target is dropped (`plan_builder.py`).
-6. **Protocol** per step: per-platform delivery preference order ∩ what the
+7. **Protocol** per step: per-platform delivery preference order ∩ what the
    artifact's `content_format` can ride (`select_protocol`, ADR-0012). Driver
    capabilities are *not* consulted at plan time — a platform absent from the
    preference table yields `protocol: null`, deferring to the driver's own
    declared order.
-7. **Timeline** against SoT change windows (`OpsChangeWindow` nodes), stage
+8. **Timeline** against SoT change windows (`OpsChangeWindow` nodes), stage
    duration = steps × 3 min, soak chains stages (`timeline.py`, ADR-0013 §4).
-8. **Priority** inherited from the intents whose contracts run on the changed
+9. **Priority** inherited from the intents whose contracts run on the changed
    devices — never typed by hand (`priority.py`, ADR-0013 §5).
-9. **Decision** — one of four modes (§5 below) — then the whole bundle is
+10. **Decision** — one of four modes (§5 below) — then the whole bundle is
    persisted.
 
 **Target.**
@@ -101,12 +109,6 @@ Infrahub proposed change) runs the pipeline
 - The planner opens the plan as a **PR** under `plans/` with a bot identity
   and blast-radius annotations (ADR-0003 — the bundle lands on disk today,
   committed manually; bot identity is still in the ADR backlog).
-- **Change-class classification** joins the pipeline between diff and
-  strategy selection (ADR-0014): classify *what kind of change this is* from
-  the artifacts' bytes. The bytes are already rendered and frozen into
-  `content/` at plan time — but no pipeline *decision* reads them: diffing
-  and strategy selection see only checksums, so today the compiler cannot
-  tell an interface-description edit from a BGP policy rewrite.
 - Webhooks short-circuit the poll interval (ADR-0004); the `watch` loop stays
   as the reconciliation guarantee.
 - The same pipeline phases wrap 1:1 into Prefect tasks
@@ -219,7 +221,8 @@ A generated, immutable document that people hand-tune stops being evidence.
 
 | Axis | Knob | Where |
 |---|---|---|
-| Rollout shape | Canary strategies: per-stage `select` / `soak_minutes` / `gate`, `requires_approvals`, keyed by blast radius | `planner/policies/canary_strategies.yaml` (+ `--policies-dir`) |
+| Rollout shape | Canary strategies: per-stage `select` / `soak_minutes` / `gate`, `requires_approvals`, keyed by blast radius | `planner/policies/canary_strategies.yaml` (+ `--policies-dir` / `IBN_POLICIES_DIR`, honored by `plan`/`run`/`dispatch`/`watch`) |
+| Pre-approval | Change classes (ADR-0014): content matchers per format, blast ceiling, rate limit, kill switch, optional strategy override | `planner/policies/change_classes.yaml` |
 | Delivery | Per-platform protocol preference order | `planner/policies/delivery_preferences.yaml` |
 | Timing | **Change windows and freezes are SoT intent data** (`OpsChangeWindow`: recurring weekly or absolute, `max_blast_radius` ceiling, device scope) — reviewed like any other intent | Infrahub (ADR-0013 §1) |
 | "Run at time X" | An **absolute-shaped window scoped to the plan's devices** can pin the start today — but only when it yields the earliest eligible slot: `next_slot` takes the earliest across *every* window matching the devices and blast radius, so a sooner-opening standing window still wins | Infrahub |
@@ -265,58 +268,80 @@ bypasses.
 | Intent | Proposed-change review in Infrahub; `infrahub/checks/` safety checks | Review implemented (Infrahub); checks scaffolded |
 | Rollout | Plan PR review under `plans/` (CODEOWNERS, blast-radius-scaled bar); merge = execution trigger | Decided (ADR-0003); PR automation not built — today `watch` keys on the *intent* PC merge |
 | Rollout | Dispatch decision: `immediate \| scheduled \| needs_approval \| blocked`; named approvals from the canary strategy, enforced at dispatch (`--approve`) | Implemented |
+| Rollout | Pre-approved change classes: a content-proven routine diff waives the per-plan approval; re-verified from frozen bytes at dispatch | Implemented (ADR-0014) |
 | Rollout | Emergency = an override **with a name on it**, not a mode: `--emergency` + inherited `critical` priority; recorded in decision + evidence | Implemented |
 | Runtime | Windows re-checked per stage at execution time — "a schedule computed at plan time is a forecast, not a permission" | Implemented |
 | Runtime | Stage gate `validator.expectations_pass`: baseline, soak, regression-only blocking, unverifiable-fails-if-changed | Implemented |
 | Runtime | `abort_on_failure`, `rollback_failed` always aborts ("page a human"), `removed_targets` never auto-executed | Implemented |
 
-### Pre-approved plan classes
+### Pre-approved plan classes (implemented — ADR-0014)
 
 Some changes should not queue behind a human: interface descriptions,
 cosmetic metadata, any change whose *entire* diff is provably inside a class
-that rollout approvers have already reviewed **as a class**. ADR-0014 defines
-the mechanism: reviewed change-class policy data + a content-aware classifier
-in the planner + fail-closed eligibility + the classification recorded in the
-plan, the decision and the SoT record. Pre-approval moves the review earlier
-— onto the class definition — it does not remove review, and it removes
-**only** the human plan-review step: windows, stage gates, evidence and
-feedback still apply unchanged.
+that rollout approvers have already reviewed **as a class**. The mechanism:
 
-Today's *de-facto* pre-approval — low/moderate blast radius selects a builtin
-strategy with no required approvals, and `watch --auto-dispatch` (default on)
-executes on PC merge — is blunt: it cannot distinguish a description edit
-from a BGP rewrite on three devices. ADR-0014 replaces "small is safe" with
-"provably in a reviewed class is safe".
+- **Reviewed policy data** — `planner/policies/change_classes.yaml`
+  (CODEOWNERS-owned; editing it IS the approval act). Ships with one class:
+  `interface-descriptions`.
+- **Content-aware classifier** — `autonetops_planner.change_classes`: regex
+  allowlists over CLI-text diff lines, model-path allowlists for
+  OpenConfig JSON. Fail-closed eligibility: whole diff matched, no added or
+  removed artifacts, blast ≤ class ceiling, no emergency, class enabled,
+  rate limit not spent.
+- **Recorded, never implicit** — `plan.policy_evaluation.pre_approved`
+  (class + policy version), `decision.pre_approved_class` with an ADR-0014
+  reason, `OpsPlanRecord.pre_approved_class` in the SoT.
+- **Re-derived at dispatch** — the bundle freezes the base bytes
+  (`content_base/`, anchored by `checksum_before`); dispatch re-proves the
+  class from bytes alone under the *current* policy before honoring an empty
+  approvals list, so a tampered `decision.yaml` is pointless and the kill
+  switch reaches already-planned bundles.
+
+Pre-approval moves the review earlier — onto the class definition — it does
+not remove review, and it removes **only** the human plan-review step:
+windows, stage gates, evidence and feedback still apply unchanged.
+
+The previous *de-facto* pre-approval — low/moderate blast radius selects a
+builtin strategy with no required approvals, and `watch --auto-dispatch`
+(default on) executes on PC merge — was blunt: it could not distinguish a
+description edit from a BGP rewrite on three devices. That path still exists
+for low/moderate plans; change classes replace "small is safe" with "provably
+in a reviewed class is safe" and are the intended direction for anything that
+should flow unattended.
 
 ## Known gaps (verified against code, in priority order)
 
-1. **`watch` dead-ends `needs_approval` plans**: its dispatch closure
-   hardcodes `approvals=[]` and any non-`waiting` exit is marked dispatched —
-   a high-blast plan merged under watch aborts once on "missing approvals"
-   and is never retried. Fix: make `needs_approval` a non-terminal state and
-   inject an approval source (plan-PR reviews) into the watch closure.
-2. **`decision.yaml` is not integrity-protected**: editing it to clear
-   `approvals_required` or set `emergency_override` changes gating
-   undetected. Fix: dispatch re-derives the decision floor from policy +
-   frozen content at dispatch time; the recorded decision may only *tighten*.
-3. **Approver names are free strings** (`--approve alice`). Near-term: map
+1. **Approver names are free strings** (`--approve alice`). Near-term: map
    plan-PR review identities; productization: RBAC in the approval service.
-4. **Priority is self-escalatable**: it is read from the *candidate* branch,
+2. **Priority is self-escalatable**: it is read from the *candidate* branch,
    and priority is what unlocks `--emergency`. Rule needed: inherit priority
    from `main` (the intent must already be critical before the change).
-5. **Dispatch-time window re-check ignores stage duration** (`next_slot`
-   called without `need_minutes`): a stage can start in a window too short to
-   finish it. The parameter exists and is tested — pass it.
-6. **`RollbackSpec.confirm_timeout_minutes` is unwired**: `run_step` confirms
+3. **`RollbackSpec.confirm_timeout_minutes` is unwired**: `run_step` confirms
    immediately. Holding the commit-confirm window open *across the validator
    gate* (auto-revert on gate failure) is the strongest automated gate the
    contract already promises.
-7. **CI gates**: committed `plans/*/plan.yaml` are never schema-validated;
+4. **CI gates**: committed `plans/*/plan.yaml` are never schema-validated;
    `policy-validate` and `simulation-gate` exist only as entries in
    `ci.yaml`'s header comment listing the target gate set — neither has a
-   job defined.
-8. **Reconcile gap**: a proposed change merged before `watch` ever saw it
+   job defined (the change-class policy file is at least pinned by
+   `planner/tests/test_change_classes.py`).
+5. **Reconcile gap**: a proposed change merged before `watch` ever saw it
    open is recorded as handled but never planned — the promised
    merged-but-unrun scan does not exist.
-9. **`watch` pins default policies** (`policies_dir=None`): custom strategies
-   (including custom approval bars) can never apply in the automated path.
+
+### Closed with ADR-0014's implementation
+
+- ~~`watch` dead-ends `needs_approval` plans~~ — dispatch exits 4 on missing
+  approvals; `watch` holds the plan (announced once, no dispatch hammering)
+  and releases the hold when a manual `dispatch --approve ...` leaves a real
+  outcome (`watch.py`).
+- ~~`decision.yaml` is not integrity-protected~~ — the approval bar can only
+  *tighten* at dispatch: pre-approval claims are re-proven from the frozen
+  bytes, everything else is raised to the strategy floor
+  (`preapproval.tighten_approvals`).
+- ~~dispatch-time window re-check ignores stage duration~~ — `next_slot` now
+  receives the same `steps × 3 min` estimate the timeline used
+  (`dispatch.py`).
+- ~~`watch` pins default policies~~ — `--policies-dir` is plumbed through
+  `watch` (and `dispatch`), so custom strategies and change classes apply in
+  the automated path.

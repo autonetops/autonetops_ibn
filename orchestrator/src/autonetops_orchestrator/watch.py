@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+import yaml
+
 PROPOSED_CHANGES_QUERY = """
 query ProposedChanges {
   CoreProposedChange {
@@ -44,6 +46,23 @@ def _load_state(path: Path) -> dict:
 
 def _save_state(path: Path, state: dict) -> None:
     path.write_text(json.dumps(state, indent=2) + "\n")
+
+
+def _released_from_hold(plan_dir: Path) -> bool:
+    """A plan held for approval leaves the hold only when a manual dispatch
+    produced a report that is not another missing-approvals abort. 'waiting'
+    stays held: the human driving it re-runs with their approvals."""
+    report_path = plan_dir / "report.yaml"
+    if not report_path.exists():
+        return False
+    try:
+        doc = yaml.safe_load(report_path.read_text()) or {}
+    except Exception:  # noqa: BLE001 - unreadable report keeps the hold
+        return False
+    status, aborted = doc.get("status"), doc.get("aborted") or ""
+    if status in ("succeeded", "failed"):
+        return True
+    return status == "aborted" and not aborted.startswith("missing approvals")
 
 
 def watch_loop(
@@ -81,6 +100,15 @@ def watch_loop(
 
             elif pc_state == "merged" and not record.get("dispatched"):
                 plan_dir = record.get("plan_dir")
+                if plan_dir and record.get("approval_hold"):
+                    # needs_approval is non-terminal: hold until a manual
+                    # `dispatch --approve ...` leaves a real outcome behind
+                    if _released_from_hold(Path(plan_dir)):
+                        record["dispatched"] = True
+                        record.pop("approval_hold", None)
+                        echo(f"[watch] {name!r}: dispatched manually; hold released")
+                        _save_state(state_path, state)
+                    continue
                 if plan_dir and not auto_dispatch:
                     # dispatch stays manual; announce once, keep undispatched
                     if not record.get("manual_hold"):
@@ -100,10 +128,17 @@ def watch_loop(
                 elif plan_dir:
                     echo(f"[watch] {name!r} merged - dispatching {plan_dir}")
                     code = dispatch_fn(Path(plan_dir))
-                    record["dispatched"] = code != 3  # 3 = waiting on window
+                    # 3 = waiting on window, 4 = missing approvals: neither is
+                    # terminal - a plan must never dead-end under automation
+                    record["dispatched"] = code not in (3, 4)
                     record["dispatch_exit"] = code
                     if code == 3:
                         echo(f"[watch] {name!r}: window not open; will retry")
+                    elif code == 4:
+                        record["approval_hold"] = True
+                        echo(f"[watch] {name!r}: plan needs approval - run "
+                             f"`ibn-orchestrate dispatch --plan-dir {plan_dir} "
+                             f"--approve <name>` (holding)")
                 else:
                     record["dispatched"] = True  # planned as empty
                 _save_state(state_path, state)

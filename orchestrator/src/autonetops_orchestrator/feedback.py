@@ -24,7 +24,7 @@ mutation RecordPlan(
   $blast_radius: String!, $device_count: BigInt!,
   $base_branch: String!, $candidate_branch: String!,
   $dispatched_at: String!, $emergency_override: Boolean!,
-  $detail: String!
+  $pre_approved_class: String!, $detail: String!
 ) {
   OpsPlanRecordUpsert(data: {
     plan_id: {value: $plan_id},
@@ -36,6 +36,7 @@ mutation RecordPlan(
     candidate_branch: {value: $candidate_branch},
     dispatched_at: {value: $dispatched_at},
     emergency_override: {value: $emergency_override},
+    pre_approved_class: {value: $pre_approved_class},
     detail: {value: $detail}
   }) {
     ok
@@ -83,6 +84,7 @@ def record_dispatch(
         "dispatched_at": (report.finished_at.isoformat()
                           if report.finished_at else ""),
         "emergency_override": decision.emergency_override,
+        "pre_approved_class": decision.pre_approved_class or "",
         "detail": _detail_line(report),
     }
     try:
