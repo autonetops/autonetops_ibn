@@ -1,0 +1,53 @@
+# OpsPlanRecord: the closed-loop feedback node (see orchestrator feedback.py).
+# One record per plan, upserted after every dispatch - compliance state lives
+# in the SoT next to the intent that caused the change.
+#
+# Load into the lab SoT with:  infrahubctl schema load infrahub/schemas/ops_plan_record.yml
+# (or let repository sync pick it up where this repo is connected to Infrahub).
+---
+version: "1.0"
+nodes:
+  - name: PlanRecord
+    namespace: Ops
+    label: Plan Record
+    description: Dispatch outcome of an IBN rollout plan (closed-loop feedback)
+    icon: mdi:clipboard-check-outline
+    default_filter: plan_id__value
+    display_labels:
+      - plan_id__value
+    order_by:
+      - dispatched_at__value
+    attributes:
+      - name: plan_id
+        kind: Text
+        unique: true
+        description: Content-addressed plan ID (plans/<plan_id>/)
+      - name: status
+        kind: Text
+        description: succeeded | failed | aborted | waiting | checked
+      - name: mode
+        kind: Text
+        description: Dispatch decision mode at execution time
+      - name: blast_radius
+        kind: Text
+        optional: true
+      - name: device_count
+        kind: Number
+        optional: true
+      - name: base_branch
+        kind: Text
+        optional: true
+      - name: candidate_branch
+        kind: Text
+        optional: true
+      - name: dispatched_at
+        kind: Text
+        optional: true
+        description: ISO timestamp of dispatch completion (UTC)
+      - name: emergency_override
+        kind: Boolean
+        default_value: false
+      - name: detail
+        kind: TextArea
+        optional: true
+        description: Per-stage outcomes, gate verdicts, abort reason

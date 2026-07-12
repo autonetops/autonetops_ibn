@@ -31,6 +31,9 @@ Infrahub branch/PC ──> plan      render base+candidate, diff, blast radius,
                   ──> dispatch   windows re-checked, approvals enforced,
                                  run_step per step, soak, expectations gate
                                  per stage, evidence.jsonl
+                                 outcome persisted: plans/<id>/report.yaml +
+                                 OpsPlanRecord upserted in the SoT (feedback.py;
+                                 schema: infrahub/schemas/ops_plan_record.yml)
                   ──> watch      plan when a PC opens, dispatch when it merges
 ```
 

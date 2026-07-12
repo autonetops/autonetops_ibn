@@ -35,7 +35,8 @@ from autonetops_planner.policies import (
 )
 from autonetops_validator import ExpectationSet
 
-from .dispatch import DispatchOptions, dispatch_plan
+from .dispatch import DispatchOptions, dispatch_plan, write_report
+from .feedback import record_dispatch
 from .priority import intent_priority_for
 from .render_source import RenderedArtifactSource
 from .strategy import Decision, apply_to_plan, decide
@@ -237,6 +238,13 @@ def _dispatch(
         ),
         driver_for=inventory.driver_for,
     )
+
+    # -- the outcome is a record, not scrollback: report.yaml next to the
+    #    plan, and (unless this was a --check) an OpsPlanRecord in the SoT.
+    report_path = write_report(plan_dir, report)
+    typer.echo(f"report -> {report_path}")
+    if not check:
+        record_dispatch(client, plan, decision, report, emit=emit, echo=typer.echo)
 
     if report.waiting:
         typer.echo("\nstopped: waiting on a window/manual gate (nothing failed)")
