@@ -33,6 +33,8 @@ history / reasoning that shaped it.
 | 0010 | Orchestrator and executor are first-class components (NAF alignment) | accepted |
 | 0011 | Southbound target model: control points and driver capabilities | accepted |
 | 0012 | Protocol preference order for delivery strategy selection | accepted |
+| 0013 | Orchestrator flow: SoT change windows, timeline evaluation, dispatch decision | accepted |
+| 0014 | Pre-approved plan classes: auto-approval as reviewed policy | proposed |
 
 ## Backlog (decisions we know we owe)
 
@@ -40,4 +42,4 @@ history / reasoning that shaped it.
 - Platform deployment target and promotion path (compose → k8s) — confirm prod target
 - Secrets management for device credentials (deployer + collectors)
 - Monorepo vs. split-out intent repos (revisit when >1 team owns intent)
-- Plan-PR automation details (bot identity, auto-approve rules for low blast radius)
+- Plan-PR automation details (bot identity; auto-approve rules decided in ADR-0014)
