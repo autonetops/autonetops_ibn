@@ -1,0 +1,112 @@
+contract_version: '1'
+id: plan-af0745e92008abea
+created_at: '2026-07-12T01:57:07+00:00'
+source:
+  base_branch: main
+  candidate_branch: workshop2-cust-c-expansion
+  proposed_change_id: null
+blast_radius:
+  class: moderate
+  device_count: 4
+  devices:
+  - ce-custc-01
+  - ce-custc-02
+  - pe-emea-01
+  - pe-emea-02
+  control_points:
+  - ce-custc-01
+  - ce-custc-02
+  - pe-emea-01
+  - pe-emea-02
+  roles:
+  - cpe
+  - edge
+  regions: []
+policy_evaluation:
+  canary_strategy: builtin-single-target-canary
+  change_window: immediate 2026-07-12T01:57:07.957041+00:00 via lab-continuous
+  rate_limits: not_evaluated
+stages:
+- name: stage-1-one_target
+  steps:
+  - target:
+      control_point: ce-custc-01
+      kind: direct
+      affected_devices:
+      - ce-custc-01
+    driver: srlinux
+    protocol: cli
+    platform: nokia_srlinux
+    artifact_definition: device-configuration
+    content_format: cli-text
+    checksum_before: 277e6d4713d0bd8ca4dabd72a4748a102ac8439e81a3acd6c2b73f4c7b38a4cf
+    checksum_after: 89252c1f3f04f7e77fbee0686979acce3b5e7a2773cbbf21e3f35aaa7f28c603
+    storage_id: null
+    rollback:
+      strategy: snapshot_revert
+      confirm_timeout_minutes: 10
+    abort_on_failure: true
+  gate:
+    kind: validator.expectations_pass
+    soak_minutes: 30
+- name: stage-2-remainder
+  steps:
+  - target:
+      control_point: ce-custc-02
+      kind: direct
+      affected_devices:
+      - ce-custc-02
+    driver: srlinux
+    protocol: cli
+    platform: nokia_srlinux
+    artifact_definition: device-configuration
+    content_format: cli-text
+    checksum_before: 6e08f161fda73165e7901dc884ffd33dc392a9f3c81b2129b705ad253c4be019
+    checksum_after: cb6f7e080070f9c0bbbe6f7d66fad6a85040ad6c1961acf2a10721a72f9998bc
+    storage_id: null
+    rollback:
+      strategy: snapshot_revert
+      confirm_timeout_minutes: 10
+    abort_on_failure: true
+  - target:
+      control_point: pe-emea-01
+      kind: direct
+      affected_devices:
+      - pe-emea-01
+    driver: eos
+    protocol: eapi
+    platform: arista_eos
+    artifact_definition: device-configuration
+    content_format: cli-text
+    checksum_before: d0321c2bf4b1f687a4a44366f459ffbca6acabb7c2b96e3eb6e5c42d58cf385b
+    checksum_after: 583bfa7b04e04e6be558b115cdc2b061b3e3c93f13663df2cee2ae90ec3da5c8
+    storage_id: null
+    rollback:
+      strategy: snapshot_revert
+      confirm_timeout_minutes: 10
+    abort_on_failure: true
+  - target:
+      control_point: pe-emea-02
+      kind: direct
+      affected_devices:
+      - pe-emea-02
+    driver: eos
+    protocol: eapi
+    platform: arista_eos
+    artifact_definition: device-configuration
+    content_format: cli-text
+    checksum_before: c64e69b65e086602bdc1c082c4917ddb4d51312fad3866e5c98b2a824bf3fc94
+    checksum_after: 30614f2f1bc1f418b5a829f0fa4c841333d8a27d8ca00b4df005d7fb104d021d
+    storage_id: null
+    rollback:
+      strategy: snapshot_revert
+      confirm_timeout_minutes: 10
+    abort_on_failure: true
+  gate:
+    kind: validator.expectations_pass
+    soak_minutes: 0
+removed_targets: []
+abort_criteria:
+- validator gate fails on any canary stage
+- any step rollback is triggered
+- manual abort via ibnctl

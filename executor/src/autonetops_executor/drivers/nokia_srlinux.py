@@ -27,6 +27,7 @@ from typing import ClassVar
 
 from ..driver import BaseDriver, register
 from ..exceptions import ChangeNotFound
+from ..facts import parse_bgp_neighbor_states
 from ..models import (
     ArtifactPayload,
     Atomicity,
@@ -69,10 +70,14 @@ class NokiaSrlinuxDriver(BaseDriver):
         started = utc_now_iso()
         with self._session() as ssh:
             version = ssh.run("info from state /system information version")
+            sessions = ssh.run(
+                "show network-instance default protocols bgp neighbor"
+            )
         return FactsResult(
             evidence=self._evidence("get_facts", started, success=True,
                                     protocol=Protocol.CLI),
-            facts={"version_raw": version.strip()[:200]},
+            facts={"version_raw": version.strip()[:200],
+                   "bgp_neighbors": parse_bgp_neighbor_states(sessions)},
         )
 
     def snapshot(self) -> Snapshot:  # pragma: no cover - live device

@@ -24,6 +24,7 @@ from typing import Any, ClassVar
 
 from ..driver import BaseDriver, register
 from ..exceptions import ChangeNotFound, ExecutorError
+from ..facts import parse_bgp_neighbor_states
 from ..models import (
     ArtifactPayload,
     Atomicity,
@@ -87,12 +88,21 @@ class AristaEosDriver(BaseDriver):
         try:
             conn.enable()
             version = conn.send_command("show version")
+            # sessions live in tenant VRFs and (vpn-ipv4) the default VRF;
+            # a command absent on this EOS build just contributes nothing
+            neighbors: dict[str, str] = {}
+            for command in ("show ip bgp summary vrf all",
+                            "show bgp vpn-ipv4 summary"):
+                output = conn.send_command(command)
+                if not ERROR_PATTERN.search(output):
+                    neighbors.update(parse_bgp_neighbor_states(output))
         finally:
             conn.disconnect()
         return FactsResult(
             evidence=self._evidence("get_facts", started, success=True,
                                     protocol=Protocol.CLI),
-            facts={"version_raw": version.strip()[:400]},
+            facts={"version_raw": version.strip()[:400],
+                   "bgp_neighbors": neighbors},
         )
 
     def snapshot(self) -> Snapshot:  # pragma: no cover - live device

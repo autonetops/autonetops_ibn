@@ -1,0 +1,9 @@
+mode: immediate
+reasons:
+- window 'lab-continuous' is open for blast radius 'moderate'
+- 'priority ''critical'' inherited from intent(s): provider-core-transport'
+approvals_required: []
+window: lab-continuous
+starts_at: '2026-07-12T01:57:07.957041Z'
+priority: critical
+emergency_override: false

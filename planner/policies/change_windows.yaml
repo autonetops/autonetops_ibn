@@ -1,14 +1,7 @@
-# Change windows and freezes — enforced by the planner, reviewed like code.
-# Schema TBD with the planner implementation; shape sketch below.
+# Change windows and freezes moved INTO THE SOT (ADR-0013): they are
+# OpsChangeWindow nodes in Infrahub, reviewed like any other intent data.
+# The orchestrator (`ibn-orchestrate windows`) reads them live; nothing
+# consumes this file anymore. Kept as a pointer, retired on purpose.
 ---
-version: draft
-windows: []
-  # - name: standard-maintenance
-  #   regions: [all]
-  #   days: [tue, wed, thu]
-  #   hours_utc: "02:00-06:00"
-freezes: []
-  # - name: year-end-freeze
-  #   from: 2026-12-15
-  #   to: 2027-01-05
-  #   exceptions_require: [platform-lead, incident-ticket]
+version: retired
+superseded_by: "Infrahub kind OpsChangeWindow (autonetops_infrahub/schemas/operations.yml)"

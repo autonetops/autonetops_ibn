@@ -80,6 +80,30 @@ class SrlSsh:
         time.sleep(0.7)
         return self._conn.read_channel()
 
+    def run_expect(self, command: str, expect: str, attempts: int = 3,
+                   read_seconds: float = 6.0) -> str:
+        """Run a command whose success has a positive confirmation string.
+
+        The first command on a fresh session can get merged with netmiko's
+        session-prep and read back the prep echo instead of its own output
+        (same failure mode enter_candidate() guards against). So: settle the
+        channel first, then keep reading until the confirmation appears, and
+        retry the whole command if it never does.
+        """
+        self.mode_banner()  # flush pending prep echo before we start
+        output = ""
+        for _ in range(attempts):
+            output = self.run(command)
+            deadline = time.time() + read_seconds
+            while expect not in output.lower() and time.time() < deadline:
+                time.sleep(0.7)
+                output += self._conn.read_channel()
+            if expect in output.lower():
+                return output
+            self.mode_banner()  # settle again before retrying
+        raise ExecutorError(
+            f"no {expect!r} confirmation for {command!r}:\n{output.strip()[-400:]}")
+
     def enter_candidate(self, attempts: int = 3) -> None:
         self.mode_banner()  # settle the channel first
         for _ in range(attempts):
@@ -110,22 +134,24 @@ class SrlSsh:
         self.run("discard stay")
 
     def commit_save(self) -> str:
-        output = self.run("commit save")
-        if "committed" not in output.lower():
-            raise ExecutorError(f"no commit confirmation:\n{output.strip()[-400:]}")
-        return output
+        # inside a long session the channel is warm, but a slow commit still
+        # needs the read-until-confirmed loop
+        return self.run_expect("commit save", "committed")
 
     def running_config_flat(self) -> str:
         """The running config as `set` lines - stable input for checksums."""
         return self.run("info flat from running")
 
     def generate_checkpoint(self, name: str) -> str:
-        output = self.run(f"tools system configuration generate-checkpoint name {name}")
-        if "generated checkpoint" not in output.lower():
-            raise ExecutorError(f"checkpoint not confirmed:\n{output.strip()[-400:]}")
-        return output
+        # often the FIRST command of a session (snapshot/apply open with it):
+        # exactly the merged-with-session-prep case run_expect() exists for
+        return self.run_expect(
+            f"tools system configuration generate-checkpoint name {name}",
+            "generated checkpoint",
+        )
 
     def revert_checkpoint(self, name: str) -> str:
+        self.mode_banner()  # first command of a rollback session - settle
         output = self.run(f"tools system configuration checkpoint {name} revert")
         low = output.lower()
         if any(m in low for m in ERROR_MARKERS):

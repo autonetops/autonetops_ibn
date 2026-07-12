@@ -1,0 +1,71 @@
+apiVersion: expectations.networking.autonetops/v1
+kind: ContractExpectations
+metadata:
+  name: custc-ce-to-pe
+  realm: routing
+  intent: custc-l3vpn-connectivity
+  statement: Customer C sites exchange routes privately over our L3VPN; only authorized
+    prefixes are announced and they never reach a public peer.
+  policy: custc-edge-routing
+  enforcement: full
+  tenant: customer-c
+  zone: corp-emea
+spec:
+  bgp:
+    sessions:
+    - device: pe-emea-01
+      neighborIp: 10.84.255.2
+      neighborDevice: ce-custc-01
+      peerAsn: 65123
+      afiSafis: &id001
+      - ipv4-unicast
+      - ipv6-unicast
+      observedVia: gnmi
+      mustBe:
+        sessionState: established
+        minUptimeSeconds: 300
+    - device: pe-emea-02
+      neighborIp: 10.84.255.6
+      neighborDevice: ce-custc-02
+      peerAsn: 65123
+      afiSafis: *id001
+      observedVia: gnmi
+      mustBe:
+        sessionState: established
+        minUptimeSeconds: 300
+    routePolicy:
+      inbound:
+        maxPrefixes:
+          ipv4: 200
+          ipv6: 100
+        allowedPrefixes:
+        - 10.84.0.0/16
+        - 10.84.20.0/24
+        - 10.84.40.0/24
+        - 2001:db8:84::/48
+        mustIncludeCommunities:
+        - 65010:1203
+        - 65010:30010
+        - 65010:55555
+      outbound:
+        forbiddenZones:
+        - internet-peers
+        - transit
+        forbiddenActions:
+        - export_prefixes_from_tenant(customer-c)
+        - originate_default_route_to_peer
+  telemetry:
+    required:
+    - signal: bgp_route_count
+      direction: inbound
+      freshnessSeconds: 60
+    - signal: bgp_session_state
+      direction: null
+      freshnessSeconds: 20
+  alerting:
+  - signal: bgp_route_count
+    severity: sev2
+    condition: count > max_prefixes
+  - signal: bgp_session_state
+    severity: sev2
+    condition: down_for > 60s

@@ -1,0 +1,25 @@
+[project]
+name = "autonetops-validator"
+version = "0.1.0"
+description = "AutoNetOps IBN validator: compare ContractExpectations against network evidence"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/autonetops_validator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

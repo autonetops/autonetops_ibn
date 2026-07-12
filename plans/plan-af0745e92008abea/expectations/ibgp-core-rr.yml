@@ -1,0 +1,45 @@
+apiVersion: expectations.networking.autonetops/v1
+kind: ContractExpectations
+metadata:
+  name: ibgp-core-rr
+  realm: routing
+  intent: provider-core-transport
+  statement: Every PE learns every VPN route through reflected iBGP - no full mesh
+    to maintain, one reflector to reason about.
+  policy: core-route-reflection
+  enforcement: full
+  tenant: null
+  zone: core
+spec:
+  bgp:
+    sessions:
+    - device: core-rr-01
+      neighborIp: 10.100.0.0
+      neighborDevice: pe-emea-01
+      peerAsn: 65010
+      afiSafis: &id001
+      - vpn-ipv4
+      observedVia: snmp
+      mustBe:
+        sessionState: established
+        minUptimeSeconds: 300
+    - device: core-rr-01
+      neighborIp: 10.100.0.2
+      neighborDevice: pe-emea-02
+      peerAsn: 65010
+      afiSafis: *id001
+      observedVia: snmp
+      mustBe:
+        sessionState: established
+        minUptimeSeconds: 300
+    routePolicy:
+      inbound:
+        maxPrefixes: null
+        allowedPrefixes: []
+        mustIncludeCommunities: []
+      outbound:
+        forbiddenZones: []
+        forbiddenActions: []
+  telemetry:
+    required: []
+  alerting: []

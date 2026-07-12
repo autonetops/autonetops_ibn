@@ -30,3 +30,6 @@ clab-*/
 .vscode/
 .idea/
 .DS_Store
+
+# orchestrator runtime state
+plans/.watch-state.json

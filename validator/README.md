@@ -1,12 +1,15 @@
 # validator/
 
 Where intent becomes **enforceable**. The validator compares expectation
-artifacts (from Infrahub) against observed state (from telemetry) and produces
-compliance/drift reports that feed back into Infrahub and the planner.
+artifacts (from Infrahub) against observed state and produces verdicts that
+gate rollouts and feed back into Infrahub and the planner.
 
 ```
 validator/
-  src/
+  src/autonetops_validator/
+    models.py        # ExpectationSet (parses ContractExpectations), verdicts
+    gate.py          # evaluate_sessions: the runtime half of
+                     #   validator.expectations_pass (ADR-0013)
   rules/             # domain-oriented compliance rules (passive, telemetry-driven)
     routing/
     security/
@@ -15,6 +18,12 @@ validator/
   drift/             # drift classification (benign vs dangerous) + diff engine
   tests/
 ```
+
+The first shipped gate is BGP-session expectations: the orchestrator's
+dispatch collects `bgp_neighbors` facts through the executor verb contract
+and this package turns them into pass / fail / **unverifiable** verdicts per
+stage. Telemetry-driven continuous evaluation (Prometheus evidence) extends
+the same models.
 
 The validator is the passive half of proving intent: continuous evaluation of
 expectations against telemetry. Its complement is **active verification** —

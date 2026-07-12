@@ -1,0 +1,45 @@
+apiVersion: expectations.networking.autonetops/v1
+kind: ContractExpectations
+metadata:
+  name: inet-peering-emea
+  realm: routing
+  intent: provider-internet-peering
+  statement: AS65010 exchanges internet routes with InetPeerCo in EMEA; nothing tenant-owned
+    ever appears at the exchange.
+  policy: emea-peering
+  enforcement: full
+  tenant: null
+  zone: internet-peers
+spec:
+  bgp:
+    sessions:
+    - device: pe-emea-02
+      neighborIp: 203.0.113.1
+      neighborDevice: peer-inet-01
+      peerAsn: 64999
+      afiSafis:
+      - ipv4-unicast
+      observedVia: gnmi
+      mustBe:
+        sessionState: established
+        minUptimeSeconds: 300
+    routePolicy:
+      inbound:
+        maxPrefixes:
+          ipv4: 50
+        allowedPrefixes:
+        - 198.51.100.0/24
+        mustIncludeCommunities: []
+      outbound:
+        forbiddenZones: []
+        forbiddenActions:
+        - reoriginate_learned_routes
+  telemetry:
+    required:
+    - signal: policy_export_violation
+      direction: outbound
+      freshnessSeconds: 60
+  alerting:
+  - signal: policy_export_violation
+    severity: sev1
+    condition: count > 5

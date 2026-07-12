@@ -1,29 +1,46 @@
 # orchestrator/
 
-The **workflow role** (ADR-0010): every long-running, stateful process in the
-closed loop lives here as a Prefect flow. Prefect is an implementation detail
-— flows consume and emit platform contracts (`contracts/`) only, and call the
-executor exclusively through its public API (ADR-0009).
+The **workflow role** (ADR-0010): sequence and reaction for the closed loop.
+Per ADR-0005 it ships as an independently runnable library + CLI first
+(`autonetops-orchestrator`, command `ibn-orchestrate`); Prefect flows in
+`flows/` wrap the same functions when the platform stack lands. No Prefect
+imports exist in `src/`.
 
 ```
 orchestrator/
-  flows/
-    deploy/      # Plan rollout: stage progression, soak timers, validator gates, abort
-    verify/      # run verification suites from remediation/verifications/:
-                 #   post-deploy (stage gates), scheduled (nightly invariant sweep),
-                 #   on-demand (ibnctl). Read-only against the network.
-    reconcile/   # "webhooks trigger, reconciliation guarantees" loops (ADR-0004):
-                 #   merged-but-unplanned changes, merged-but-unrun plans
-    remediate/   # executes remediation/playbooks/ by class: safe fixes propose
-                 #   plan PRs (never direct pushes), quarantines contain + collect
-    onboard/     # device / control-point / tenant onboarding workflows
+  src/autonetops_orchestrator/
+    render_source.py  # render artifacts per Infrahub branch, in-process
+    windows.py        # OpsChangeWindow from the SoT: occurrences, freezes
+    timeline.py       # fit stages into windows, chain soak (ADR-0013)
+    strategy.py       # immediate | scheduled | needs_approval | blocked
+    priority.py       # plan urgency inherited from the intent layer
+    dispatch.py       # stage walker: run_step + validator gates + soak
+    watch.py          # reconcile loop over proposed changes (ADR-0004)
+    cli.py            # ibn-orchestrate windows|plan|dispatch|run|watch
+  flows/              # Prefect packaging of the above (future)
+```
+
+## The flow
+
+```
+Infrahub branch/PC ──> plan      render base+candidate, diff, blast radius,
+                                 canary stages (planner), timeline vs SoT
+                                 change windows, dispatch decision
+                       plans/<plan-id>/   plan.yaml timeline.yaml decision.yaml
+                                          content/*.cfg expectations/*.yml
+                  ──> dispatch   windows re-checked, approvals enforced,
+                                 run_step per step, soak, expectations gate
+                                 per stage, evidence.jsonl
+                  ──> watch      plan when a PC opens, dispatch when it merges
 ```
 
 ## Rules
 
-1. Flows never talk to devices — only the executor does (ADR-0010/0011).
+1. Flows never talk to devices — only the executor does (ADR-0010/0011);
+   dispatch calls `autonetops_executor.run_step` / `get_facts` exclusively.
 2. Flows never decide *what* changes (Infrahub) or *whether it's safe*
-   (planner + approved Plan). They decide *sequence and reaction*.
-3. Every flow is idempotent and resumable: re-running a partially completed
-   rollout must be safe (the executor's evidence tells it where it stopped).
-4. Package: `autonetops-orchestrator-flows`, depends on `autonetops-executor`.
+   (planner + approved Plan). They decide *sequence and reaction* — and
+   *when*, against `OpsChangeWindow` data in the SoT (ADR-0013).
+3. Every phase is idempotent and resumable: plans are content-addressed,
+   dispatch re-checks windows at execution time, watch keeps its state on
+   disk and reconciles the full proposed-change list every pass.
