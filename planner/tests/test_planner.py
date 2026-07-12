@@ -87,14 +87,23 @@ def test_plan_stages_targets_and_rollback(changeset):
 
 
 def test_protocol_selection_policy():
+    from autonetops_planner.models import ContentFormat
     from autonetops_planner.policies import DEFAULT_DELIVERY_PREFERENCES, select_protocol
 
-    assert select_protocol("junos", DEFAULT_DELIVERY_PREFERENCES) == "netconf"
-    assert select_protocol("srlinux", DEFAULT_DELIVERY_PREFERENCES) == "gnmi"
-    assert select_protocol("eos", DEFAULT_DELIVERY_PREFERENCES) == "eapi"
+    prefs = DEFAULT_DELIVERY_PREFERENCES
+    # model-based artifacts prefer NETCONF (or the platform's native
+    # structured path) - ADR-0012, transactional safety first
+    assert select_protocol("junos", prefs, ContentFormat.IETF_XML) == "netconf"
+    assert select_protocol("eos", prefs, ContentFormat.OPENCONFIG_JSON) == "netconf"
+    assert select_protocol("srlinux", prefs, ContentFormat.OPENCONFIG_JSON) == "gnmi"
+    # CLI text cannot ride NETCONF/gNMI: it falls to a CLI-shaped transport
+    assert select_protocol("junos", prefs) == "cli"
+    assert select_protocol("srlinux", prefs, ContentFormat.CLI_TEXT) == "cli"
+    assert select_protocol("eos", prefs, ContentFormat.CLI_TEXT) == "eapi"
+    assert select_protocol("cloudvision", prefs) == "http_api"
     # unknown platform -> None: the driver's own declared order applies
-    assert select_protocol("mystery-nos", DEFAULT_DELIVERY_PREFERENCES) is None
-    assert select_protocol(None, DEFAULT_DELIVERY_PREFERENCES) is None
+    assert select_protocol("mystery-nos", prefs) is None
+    assert select_protocol(None, prefs) is None
 
 
 def test_delivery_preferences_yaml_matches_builtin_defaults():

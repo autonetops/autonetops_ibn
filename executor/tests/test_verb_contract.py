@@ -27,7 +27,7 @@ def device():
 
 
 def test_registry_and_capability_declarations():
-    assert available_drivers() == ["mock", "srlinux"]
+    assert available_drivers() == ["eos", "mock", "netconf", "srlinux"]
     for name, caps in capability_report().items():
         assert caps.protocols, f"driver {name} must declare at least one protocol"
     with pytest.raises(UnknownDriver):
@@ -79,11 +79,27 @@ def test_rollback_unknown_reference_raises(device):
 
 
 def test_undeclared_capabilities_refuse_loudly():
-    srl = get_driver_class("srlinux")("srl1-lab")
-    with pytest.raises(UnsupportedCapability):
-        srl.dry_run(ARTIFACT)
-    with pytest.raises(UnsupportedCapability):
-        srl.confirm("chg-x")
+    # neither CLI driver has confirm semantics wired yet - the capability
+    # matrix says so, and invoking the verb anyway must raise
+    for name in ("srlinux", "eos"):
+        driver = get_driver_class(name)(f"{name}-lab")
+        with pytest.raises(UnsupportedCapability):
+            driver.confirm("chg-x")
+
+
+def test_capability_matrix_matches_transaction_reality():
+    report = capability_report()
+    # SR Linux: private-candidate diff = dry_run; checkpoint revert = snapshot
+    assert report["srlinux"].supports_dry_run and report["srlinux"].supports_snapshot
+    # EOS: config-session diff = dry_run; checkpoint + configure replace = snapshot
+    assert report["eos"].supports_dry_run and report["eos"].supports_snapshot
+    # NETCONF: the only path with confirmed-commit today
+    assert report["netconf"].supports_confirm
+    # CLI text can only ride CLI-shaped transports (ADR-0012)
+    from autonetops_executor.models import Protocol
+    assert report["srlinux"].protocols[0] == Protocol.CLI
+    assert report["eos"].protocols[0] == Protocol.CLI
+    assert report["netconf"].protocols == [Protocol.NETCONF]
 
 
 def test_every_verb_result_is_serializable(device):

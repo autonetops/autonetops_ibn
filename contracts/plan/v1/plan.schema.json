@@ -55,6 +55,16 @@
       "title": "BlastRadiusClass",
       "type": "string"
     },
+    "ContentFormat": {
+      "description": "What the artifact's bytes ARE - this, not taste, drives protocol\nselection (ADR-0012): model-based payloads prefer NETCONF/gNMI, CLI\ntext can only ride a CLI-shaped transport.",
+      "enum": [
+        "cli-text",
+        "openconfig-json",
+        "ietf-xml"
+      ],
+      "title": "ContentFormat",
+      "type": "string"
+    },
     "ControlPointKind": {
       "enum": [
         "direct",
@@ -208,6 +218,10 @@
           ],
           "default": null,
           "title": "Checksum Before"
+        },
+        "content_format": {
+          "$ref": "#/$defs/ContentFormat",
+          "default": "cli-text"
         },
         "driver": {
           "anyOf": [

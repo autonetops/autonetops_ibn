@@ -34,6 +34,19 @@ class ControlPointKind(str, Enum):
     CONTROLLER = "controller"  # one endpoint managing N devices
 
 
+class ContentFormat(str, Enum):
+    """What the artifact's bytes ARE - this, not taste, drives protocol
+    selection (ADR-0012): model-based payloads prefer NETCONF/gNMI, CLI
+    text can only ride a CLI-shaped transport."""
+
+    CLI_TEXT = "cli-text"  # platform-native CLI lines
+    OPENCONFIG_JSON = "openconfig-json"  # OC JSON document (gNMI Set / NETCONF)
+    IETF_XML = "ietf-xml"  # YANG XML document (NETCONF edit-config)
+
+
+MODEL_BASED_FORMATS = {ContentFormat.OPENCONFIG_JSON, ContentFormat.IETF_XML}
+
+
 class TargetArtifact(BaseModel):
     """One rendered artifact for one control point, as exposed by Infrahub."""
 
@@ -45,6 +58,7 @@ class TargetArtifact(BaseModel):
     platform: str | None = None
     role: str | None = None
     region: str | None = None
+    content_format: ContentFormat = ContentFormat.CLI_TEXT
     affected_devices: list[str] = Field(
         default_factory=list,
         description="Devices this artifact ultimately touches; empty means [target].",
@@ -67,6 +81,7 @@ class ChangeItem(BaseModel):
     platform: str | None = None
     role: str | None = None
     region: str | None = None
+    content_format: ContentFormat = ContentFormat.CLI_TEXT
     affected_devices: list[str] = Field(default_factory=list)
 
     @property
@@ -122,6 +137,7 @@ class Step(BaseModel):
     protocol: str | None = None  # delivery protocol per ADR-0012; None = driver's choice
     platform: str | None = None
     artifact_definition: str
+    content_format: ContentFormat = ContentFormat.CLI_TEXT
     checksum_before: str | None = None
     checksum_after: str
     storage_id: str | None = None

@@ -36,6 +36,7 @@ def diff_artifacts(
                 platform=meta.platform,
                 role=meta.role,
                 region=meta.region,
+                content_format=meta.content_format,
                 affected_devices=meta.affected_devices,
             )
         )

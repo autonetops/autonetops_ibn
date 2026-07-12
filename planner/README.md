@@ -50,7 +50,7 @@ autonetops-planner export-schema
   strategy selection. (Window/rate-limit evaluation: not yet implemented —
   reported as `not_evaluated` in the Plan, honestly.)
 - Artifact **removals never become deploy steps** — they land in
-  `removed_devices` for an explicit decommission decision.
+  `removed_targets` for an explicit decommission decision.
 
 ## Non-responsibilities
 

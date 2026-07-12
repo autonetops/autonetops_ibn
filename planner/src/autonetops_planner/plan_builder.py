@@ -24,6 +24,17 @@ PLATFORM_ROLLBACK: dict[str, str] = {
     "junos": "commit_confirmed",
     "iosxr": "commit_confirm",
     "eos": "checkpoint",
+    "arista_eos": "snapshot_revert",  # eos driver: checkpoint + configure replace
+    "nokia_srlinux": "snapshot_revert",  # srlinux driver: checkpoint revert
+}
+
+# Platform (as named in the SoT) -> executor driver registry name. Platforms
+# not listed have no driver yet; the runner must refuse those steps loudly.
+PLATFORM_DRIVERS: dict[str, str] = {
+    "nokia_srlinux": "srlinux",
+    "srlinux": "srlinux",
+    "arista_eos": "eos",
+    "eos": "eos",
 }
 
 DEFAULT_ABORT_CRITERIA = [
@@ -51,10 +62,13 @@ def _step_for(item: ChangeItem, delivery_prefs: dict) -> Step:
             kind=item.kind,
             affected_devices=item.effective_devices,
         ),
-        driver=(item.platform or "").lower() or None,
-        protocol=select_protocol(item.platform, delivery_prefs),
+        driver=PLATFORM_DRIVERS.get(
+            (item.platform or "").lower(), (item.platform or "").lower() or None
+        ),
+        protocol=select_protocol(item.platform, delivery_prefs, item.content_format),
         platform=item.platform,
         artifact_definition=item.definition,
+        content_format=item.content_format,
         checksum_before=item.checksum_before,
         checksum_after=item.checksum_after,
         storage_id=item.storage_id_after,

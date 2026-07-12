@@ -1,13 +1,22 @@
 # Protocol preference for CONFIG DELIVERY, per platform (ADR-0012).
 # Order = transactional safety first. This file is policy (reviewable data);
 # driver CapabilityMatrix declarations are the authority on what works.
-# CLI never wins by default — it requires an explicit entry here.
+#
+# The planner intersects this order with what the artifact's content_format
+# can ride: model-based payloads (ietf-xml / openconfig-json) are eligible
+# for netconf/gnmi/json_rpc/http_api; CLI text only for cli/eapi/http_api/
+# json_rpc. So NETCONF wins automatically wherever it is listed first, the
+# moment a compiler emits model-based artifacts for that platform.
 ---
 version: 1
-default_order: [gnmi, netconf, http_api]
+default_order: [netconf, gnmi, http_api, cli]
 platforms:
-  junos: [netconf, gnmi]        # commit-confirmed lives on NETCONF
-  iosxr: [netconf, gnmi]        # commit confirmed via NETCONF
-  eos: [eapi, gnmi]             # config sessions w/ commit timer via eAPI
-  srlinux: [gnmi, json_rpc]     # gNMI-native; atomic replace + snapshot_revert
-  cloudvision: [http_api]       # controller: native API by definition
+  junos: [netconf, gnmi, cli]                    # commit-confirmed lives on NETCONF
+  iosxr: [netconf, gnmi, cli]                    # commit confirmed via NETCONF
+  eos: [netconf, eapi, gnmi, cli]                # config sessions w/ commit timer
+  arista_eos: [netconf, eapi, gnmi, cli]
+  srlinux: [gnmi, netconf, cli, json_rpc]        # gNMI-native; json-rpc off in lab
+  nokia_srlinux: [gnmi, netconf, cli, json_rpc]
+  cisco_iosxe: [netconf, cli]
+  frr: [cli]
+  cloudvision: [http_api]                        # controller: native API by definition

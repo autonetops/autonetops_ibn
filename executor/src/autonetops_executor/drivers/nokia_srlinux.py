@@ -1,24 +1,32 @@
-"""Nokia SR Linux driver — Phase 1 (ADR-0011), gNMI via pygnmi.
+"""Nokia SR Linux driver — integration-tested against containerlab (ADR-0011).
 
-STATUS: structural skeleton with honest capability declaration; NOT yet
-integration-tested against containerlab. The first containerlab milestone
-(simulations/) turns every `pragma: no cover` block into tested code.
+Delivery rides the SSH CLI (transports/srl_ssh.py): rendered artifacts are
+``set`` lines, and SR Linux's private candidate gives real transaction
+semantics over that format:
 
-Capability notes:
-- Pure gNMI SetRequest is atomic per request (per_change) but has no
-  confirm/auto-revert; rollback is snapshot_revert (Get full config before,
-  Set replace to restore on failure).
-- dry_run is not available over plain gNMI; declared False so the planner
-  selects a simulation gate + snapshot strategy (ADR-0011/0012).
+- dry_run: source the lines into a private candidate, ``diff``, discard.
+  Declared supported - it costs nothing and it is the strongest pre-apply
+  evidence a lab driver can produce.
+- apply:   checkpoint first (``pre-<change_id>``), then source + commit save.
+- rollback: ``tools system configuration checkpoint <name> revert``; accepts
+  either a snapshot_id (checkpoint taken by snapshot()) or a change_id
+  (checkpoint taken by apply()).
+- confirm: still unsupported; SR Linux has commit-confirmed semantics, but
+  wiring the timer through the orchestrator is future work. The capability
+  matrix says so honestly.
+
+gNMI stays the preferred *telemetry* path (the observability pipeline
+subscribes on 57400); pushing full CLI-text artifacts over gNMI Set is not
+possible, which is why config delivery declares CLI first (ADR-0012).
 """
 
 from __future__ import annotations
 
 import hashlib
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from ..driver import BaseDriver, register
-from ..exceptions import ExecutorError
+from ..exceptions import ChangeNotFound
 from ..models import (
     ArtifactPayload,
     Atomicity,
@@ -32,74 +40,90 @@ from ..models import (
     Transactionality,
     utc_now_iso,
 )
+from ..transports.srl_ssh import SrlSsh
 
 
 @register
 class NokiaSrlinuxDriver(BaseDriver):
     name: ClassVar[str] = "srlinux"
     capabilities: ClassVar[CapabilityMatrix] = CapabilityMatrix(
-        transactional=Transactionality.PER_CHANGE,
-        supports_dry_run=False,
+        transactional=Transactionality.PER_SESSION,
+        supports_dry_run=True,
         supports_confirm=False,
         supports_snapshot=True,
         atomicity=Atomicity.PER_DEVICE,
-        protocols=[Protocol.GNMI, Protocol.JSON_RPC],
+        protocols=[Protocol.CLI, Protocol.GNMI],
     )
 
-    def _client(self):  # pragma: no cover - requires pygnmi + live device
-        try:
-            from pygnmi.client import gNMIclient
-        except ImportError as exc:
-            raise ExecutorError(
-                "pygnmi not installed; use `pip install autonetops-executor[gnmi]`"
-            ) from exc
-        return gNMIclient(
-            target=(self.connection["host"], self.connection.get("port", 57400)),
-            username=self.connection["username"],
-            password=self.connection["password"],
-            skip_verify=self.connection.get("skip_verify", False),
-        )
+    def _session(self) -> SrlSsh:  # pragma: no cover - live device
+        return SrlSsh(self.connection)
+
+    @staticmethod
+    def _lines(artifact: ArtifactPayload) -> list[str]:
+        return [
+            line for line in artifact.content.splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
 
     def get_facts(self) -> FactsResult:  # pragma: no cover - live device
         started = utc_now_iso()
-        with self._client() as client:
-            caps: dict[str, Any] = client.capabilities()
+        with self._session() as ssh:
+            version = ssh.run("info from state /system information version")
         return FactsResult(
-            evidence=self._evidence("get_facts", started, success=True),
-            facts={"gnmi_version": caps.get("gnmi_version"), "models": len(caps.get("supported_models", []))},
+            evidence=self._evidence("get_facts", started, success=True,
+                                    protocol=Protocol.CLI),
+            facts={"version_raw": version.strip()[:200]},
         )
 
     def snapshot(self) -> Snapshot:  # pragma: no cover - live device
         self._require("supports_snapshot")
         started = utc_now_iso()
-        with self._client() as client:
-            config = str(client.get(path=["/"], datatype="config"))
-        checksum = hashlib.sha256(config.encode()).hexdigest()
-        # TODO(integration): persist snapshot content to evidence storage;
-        # in-memory reference is a placeholder until the storage decision.
-        self._last_snapshot = config
+        with self._session() as ssh:
+            config = ssh.running_config_flat()
+            checksum = hashlib.sha256(config.encode()).hexdigest()
+            name = f"ibn-{checksum[:12]}"
+            ssh.generate_checkpoint(name)
         return Snapshot(
-            evidence=self._evidence("snapshot", started, success=True),
-            snapshot_id=f"snap-{checksum[:12]}",
+            evidence=self._evidence("snapshot", started, success=True,
+                                    protocol=Protocol.CLI, checkpoint=name),
+            snapshot_id=name,
             checksum=checksum,
         )
 
-    def dry_run(self, artifact: ArtifactPayload) -> DiffResult:
-        self._require("supports_dry_run")  # always raises: declared unsupported
-        raise AssertionError("unreachable")
+    def dry_run(self, artifact: ArtifactPayload) -> DiffResult:  # pragma: no cover - live device
+        self._require("supports_dry_run")
+        started = utc_now_iso()
+        with self._session() as ssh:
+            ssh.enter_candidate()
+            ssh.source_lines(self._lines(artifact))
+            diff = ssh.diff()
+            ssh.discard()
+        changed = bool(diff.strip())
+        return DiffResult(
+            evidence=self._evidence("dry_run", started, success=True,
+                                    protocol=Protocol.CLI,
+                                    artifact_checksum=artifact.checksum),
+            changed=changed,
+            diff=diff,
+        )
 
     def apply(self, artifact: ArtifactPayload) -> PendingChange:  # pragma: no cover - live device
         started = utc_now_iso()
-        with self._client() as client:
-            result = client.set(replace=[("/", artifact.content)], encoding="json_ietf")
+        change_id = f"chg-{artifact.checksum[:12]}"
+        with self._session() as ssh:
+            ssh.generate_checkpoint(f"pre-{change_id}")
+            ssh.enter_candidate()
+            ssh.source_lines(self._lines(artifact))
+            commit_output = ssh.commit_save()
         return PendingChange(
             evidence=self._evidence(
-                "apply", started, success=True,
-                artifact_checksum=artifact.checksum, gnmi_response=str(result),
+                "apply", started, success=True, protocol=Protocol.CLI,
+                artifact_checksum=artifact.checksum,
+                commit=commit_output.strip()[-200:],
             ),
-            change_id=f"chg-{artifact.checksum[:12]}",
+            change_id=change_id,
             rollback_strategy="snapshot_revert",
-            confirm_deadline_seconds=None,  # no confirm semantics over plain gNMI
+            confirm_deadline_seconds=None,  # no confirm semantics wired yet
         )
 
     def confirm(self, change_id: str) -> Evidence:
@@ -108,9 +132,14 @@ class NokiaSrlinuxDriver(BaseDriver):
 
     def rollback(self, reference: str) -> Evidence:  # pragma: no cover - live device
         started = utc_now_iso()
-        snapshot = getattr(self, "_last_snapshot", None)
-        if snapshot is None:
-            raise ExecutorError("no snapshot available to revert to")
-        with self._client() as client:
-            client.set(replace=[("/", snapshot)], encoding="json_ietf")
-        return self._evidence("rollback", started, success=True, restored="snapshot")
+        if reference.startswith("chg-"):
+            checkpoint, restored = f"pre-{reference}", "change"
+        elif reference.startswith("ibn-") or reference.startswith("pre-"):
+            checkpoint, restored = reference, "snapshot"
+        else:
+            raise ChangeNotFound(f"unknown rollback reference {reference!r}")
+        with self._session() as ssh:
+            ssh.revert_checkpoint(checkpoint)
+        return self._evidence("rollback", started, success=True,
+                              protocol=Protocol.CLI,
+                              restored=restored, checkpoint=checkpoint)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import BlastRadiusClass
+from .models import BlastRadiusClass, ContentFormat, MODEL_BASED_FORMATS
 
 
 @dataclass
@@ -95,14 +95,33 @@ def select_strategy(
 
 
 # -- delivery preferences (ADR-0012) -----------------------------------------
+#
+# Two axes decide the protocol:
+#   1. what the platform speaks (per-platform preference order below)
+#   2. what the artifact IS (content_format): a model-based payload
+#      (openconfig-json / ietf-xml) prefers NETCONF then gNMI; CLI text can
+#      only ride a CLI-shaped transport (cli / eapi).
+# The intersection is taken in platform-preference order, so a platform that
+# ranks netconf first gets netconf the moment its artifacts turn model-based.
+
+FORMAT_PROTOCOLS: dict[str, list[str]] = {
+    # protocols able to carry each artifact format
+    "model-based": ["netconf", "gnmi", "json_rpc", "http_api"],
+    # eAPI/REST/JSON-RPC all wrap CLI text; NETCONF and gNMI cannot carry it
+    "cli-text": ["cli", "eapi", "http_api", "json_rpc"],
+}
 
 DEFAULT_DELIVERY_PREFERENCES: dict = {
-    "default_order": ["gnmi", "netconf", "http_api"],
+    "default_order": ["netconf", "gnmi", "http_api", "cli"],
     "platforms": {
-        "junos": ["netconf", "gnmi"],
-        "iosxr": ["netconf", "gnmi"],
-        "eos": ["eapi", "gnmi"],
-        "srlinux": ["gnmi", "json_rpc"],
+        "junos": ["netconf", "gnmi", "cli"],
+        "iosxr": ["netconf", "gnmi", "cli"],
+        "eos": ["netconf", "eapi", "gnmi", "cli"],
+        "arista_eos": ["netconf", "eapi", "gnmi", "cli"],
+        "srlinux": ["gnmi", "netconf", "cli", "json_rpc"],
+        "nokia_srlinux": ["gnmi", "netconf", "cli", "json_rpc"],
+        "cisco_iosxe": ["netconf", "cli"],
+        "frr": ["cli"],
         "cloudvision": ["http_api"],
     },
 }
@@ -124,10 +143,23 @@ def load_delivery_preferences(policies_dir: str | Path | None) -> dict:
     }
 
 
-def select_protocol(platform: str | None, preferences: dict) -> str | None:
-    """First protocol in the platform's preference list; None = unknown
-    platform, the driver's own declared order applies (ADR-0012)."""
+def select_protocol(
+    platform: str | None,
+    preferences: dict,
+    content_format: ContentFormat = ContentFormat.CLI_TEXT,
+) -> str | None:
+    """First platform-preferred protocol that can carry the artifact's
+    format; None = unknown platform, the driver's own declared order
+    applies (ADR-0012). NETCONF/gNMI are only eligible for model-based
+    payloads - CLI text cannot ride them."""
     if not platform:
         return None
     order = preferences["platforms"].get(platform.lower())
-    return order[0] if order else None
+    if not order:
+        return None
+    format_key = "model-based" if content_format in MODEL_BASED_FORMATS else "cli-text"
+    eligible = FORMAT_PROTOCOLS[format_key]
+    for protocol in order:
+        if protocol in eligible:
+            return protocol
+    return None
