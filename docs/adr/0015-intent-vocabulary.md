@@ -91,7 +91,10 @@ with correlations and enforcement points lives in
   flattens — contracts link straight to their intent, "policy" is freed for
   rule instruments — and `orchestrator/priority.py`'s walk shortens by a
   hop. Schema migration owed in the SoT repo alongside
-  `infrahub/schemas/intent_model.yml` here.
+  `infrahub/schemas/intent_model.yml` here: `IntentRoutingContract` gains
+  `inherit_from: [IntentContract]`, and `OpsChangeWindow` (with future
+  operational-policy kinds) gains `inherit_from: [IntentPolicy]` so "what
+  rules are in force" has one query.
 - `infrahub/checks/` implement policy enforcement and invariant
   *projections* at intent-merge time; naming in that directory should say
   which ("policy_" / "invariant_" prefixes when files land).

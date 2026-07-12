@@ -1,0 +1,406 @@
+# The intent model (ADR-0015): Intent + its four instruments.
+#
+#   An intent is ACHIEVED by its contracts, GOVERNED by policies,
+#   GUARANTEED by invariants, and TEMPERED by waivers.
+#
+# Design rules encoded here (full model: docs/architecture/intent-model.md,
+# field guide: infrahub/schemas/README.md - descriptions below stay short on
+# purpose, the server caps them at 128 chars):
+#   - IntentDefinition is the aggregate root: identity, owner, priority,
+#     domain. It compiles to NOTHING - instruments do the work.
+#   - Contracts are OWNED (Parent/Component, cascade): exactly one intent.
+#   - Policies and invariants are REFERENCED, never owned: they attach by
+#     scope (global | domain | intent) and survive any intent's deletion.
+#   - Waivers carry one target (policy XOR invariant), one subject, an
+#     owner and a HARD expiry. No waiver is permanent.
+#   - `domain` is an attribute, not a node kind: the taxonomy grows without
+#     schema migrations. `priority` is closed (the platform orders it).
+#   - Contract / Policy / Invariant are GENERICS: domain-typed kinds inherit
+#     them so platform queries cover every implementation. The
+#     Intent*Generic* nodes below are free-form instantiable starters.
+#
+# Load into the SoT with:  infrahubctl schema load infrahub/schemas/intent_model.yml
+# (or let repository sync pick it up - .infrahub.yml syncs this directory).
+# Dry-run against a live server first:  infrahubctl schema check
+---
+version: "1.0"
+
+generics:
+  - name: Contract
+    namespace: Intent
+    label: Contract
+    description: >-
+      A promise of a measurable outcome to a named consumer. Compiles to
+      expectations; fails as a broken promise.
+    icon: mdi:file-sign
+    human_friendly_id:
+      - name__value
+    default_filter: name__value
+    display_labels:
+      - name__value
+    order_by:
+      - name__value
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+        description: Stable identifier; expectations cite it via derives_from URIs
+      - name: description
+        kind: TextArea
+        optional: true
+        description: The promise in one or two human sentences
+      - name: consumer
+        kind: Text
+        optional: true
+        description: Who loses if this breaks - customer, peer, internal team
+      - name: status
+        kind: Dropdown
+        choices:
+          - name: draft
+            description: Authored, not yet in force
+          - name: active
+            description: In force - compiled, gated, continuously evaluated
+          - name: retired
+            description: No longer promised; kept for history
+        default_value: active
+    relationships:
+      - name: intent
+        peer: IntentDefinition
+        identifier: intent__contract
+        cardinality: one
+        kind: Parent
+        optional: false
+        description: The intent this contract achieves - exactly one, always
+      - name: objectives
+        peer: IntentObjective
+        identifier: contract__objective
+        cardinality: many
+        kind: Component
+        optional: true
+        on_delete: cascade
+        description: Measurable terms, one node each; typed kinds may encode terms natively and leave this empty
+
+  - name: Policy
+    namespace: Intent
+    label: Policy
+    description: >-
+      A standing rule on HOW outcomes may be realized. Bites at decision
+      time as a rejected change; attaches by scope, never owned.
+    icon: mdi:gavel
+    human_friendly_id:
+      - name__value
+    default_filter: name__value
+    display_labels:
+      - name__value
+    order_by:
+      - name__value
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+      - name: description
+        kind: TextArea
+        optional: true
+        description: The rule, stated so a reviewer can apply it without asking
+      - name: subject
+        kind: Dropdown
+        choices:
+          - name: network
+            description: Constrains the network's design/configuration
+          - name: operational
+            description: Constrains the automation - windows, canary strategies, change classes, rate limits, approval bars
+        default_value: network
+      - name: scope
+        kind: Dropdown
+        choices:
+          - name: global
+            description: Fleet-wide; applies to every intent
+          - name: domain
+            description: Applies to every intent in the listed domains
+          - name: intent
+            description: Applies only to explicitly linked intents
+        default_value: global
+      - name: domains
+        kind: List
+        optional: true
+        description: When scope=domain - which intent domains this governs
+      - name: enforcement
+        kind: Text
+        optional: true
+        description: "Where it bites (informational): merge | compile | dispatch | continuous"
+      - name: enabled
+        kind: Boolean
+        default_value: true
+        description: Kill switch. Prefer a scoped, expiring Waiver over disabling a policy fleet-wide.
+    relationships:
+      - name: intents
+        peer: IntentDefinition
+        identifier: intent__policy
+        cardinality: many
+        kind: Generic
+        optional: true
+        description: Explicit attachments when scope=intent; reference only, never ownership
+
+  - name: Invariant
+    namespace: Intent
+    label: Invariant
+    description: >-
+      A state condition that must always hold, independent of any contract
+      or change. False = incident; evaluated continuously.
+    icon: mdi:shield-check
+    human_friendly_id:
+      - name__value
+    default_filter: name__value
+    display_labels:
+      - name__value
+    order_by:
+      - name__value
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+      - name: description
+        kind: TextArea
+        optional: true
+        description: The condition that must never be untrue
+      - name: severity
+        kind: Dropdown
+        choices:
+          - name: warning
+            description: Degraded safety margin; fix soon
+          - name: major
+            description: Real exposure; fix now
+          - name: critical
+            description: Incident; page
+        default_value: critical
+        description: What its violation is worth when it happens
+      - name: scope
+        kind: Dropdown
+        choices:
+          - name: global
+            description: Fleet-wide
+          - name: domain
+            description: Every intent in the listed domains
+          - name: intent
+            description: Only explicitly linked intents
+        default_value: global
+      - name: domains
+        kind: List
+        optional: true
+        description: When scope=domain - which intent domains this guarantees
+      - name: expression
+        kind: TextArea
+        optional: true
+        description: The checkable statement (free-form until the grammar lands); typed kinds may encode it natively
+      - name: enabled
+        kind: Boolean
+        default_value: true
+        description: Kill switch, loud and fleet-wide. A scoped, expiring Waiver is almost always the right tool instead.
+    relationships:
+      - name: intents
+        peer: IntentDefinition
+        identifier: intent__invariant
+        cardinality: many
+        kind: Generic
+        optional: true
+        description: Explicit attachments when scope=intent; reference only, never ownership
+
+nodes:
+  - name: Definition
+    namespace: Intent
+    label: Intent
+    description: >-
+      Aggregate root - a named outcome with owner, priority, domain.
+      Compiles to nothing; its attached instruments do the work.
+    icon: mdi:bullseye-arrow
+    human_friendly_id:
+      - name__value
+    default_filter: name__value
+    display_labels:
+      - name__value
+    order_by:
+      - name__value
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+        description: Stable identifier; the root of every derives_from URI below it
+      - name: description
+        kind: TextArea
+        optional: true
+        description: The outcome, stated as WHY - never as mechanism
+      - name: domain
+        kind: Text
+        description: Free-form taxonomy tag (grows without migrations); starter set in infrahub/schemas/README.md
+      - name: owner
+        kind: Text
+        description: Accountable team or person; requests waivers on this intent's behalf
+      - name: priority
+        kind: Dropdown
+        choices:
+          - name: low
+          - name: medium
+          - name: high
+          - name: critical
+            description: Unlocks --emergency dispatch when combined with an explicit override
+        default_value: medium
+        description: Business urgency; lives ONLY here and flows down to contracts and plans (highest wins)
+      - name: status
+        kind: Dropdown
+        choices:
+          - name: draft
+          - name: active
+          - name: deprecated
+          - name: retired
+        default_value: active
+    relationships:
+      - name: contracts
+        peer: IntentContract
+        identifier: intent__contract
+        cardinality: many
+        kind: Component
+        optional: true
+        on_delete: cascade
+        description: ACHIEVED BY - owned, die with the intent. Zero contracts = untestable intent (merge-check finding).
+      - name: policies
+        peer: IntentPolicy
+        identifier: intent__policy
+        cardinality: many
+        kind: Generic
+        optional: true
+        description: GOVERNED BY - referenced, never owned; only intent-scoped policies link here
+      - name: invariants
+        peer: IntentInvariant
+        identifier: intent__invariant
+        cardinality: many
+        kind: Generic
+        optional: true
+        description: GUARANTEED BY - referenced, never owned; only intent-scoped invariants link here
+
+  - name: Objective
+    namespace: Intent
+    label: Objective
+    description: >-
+      One measurable term inside a contract (SRE analogue - the SLO). The
+      unit expectations compile from and verdicts roll up to.
+    icon: mdi:check-circle-outline
+    default_filter: name__value
+    display_labels:
+      - name__value
+    order_by:
+      - name__value
+    uniqueness_constraints:
+      - ["contract", "name__value"]
+    attributes:
+      - name: name
+        kind: Text
+        description: Short term name, unique within its contract
+      - name: description
+        kind: TextArea
+        optional: true
+      - name: expression
+        kind: TextArea
+        description: The checkable statement compilers turn into expectations; free-form until the grammar lands
+    relationships:
+      - name: contract
+        peer: IntentContract
+        identifier: contract__objective
+        cardinality: one
+        kind: Parent
+        optional: false
+        description: The contract this term belongs to
+
+  - name: Waiver
+    namespace: Intent
+    label: Waiver
+    description: >-
+      Time-boxed permission for one subject to violate one policy or
+      invariant. Hard expiry; approved by the target's owner.
+    icon: mdi:clock-alert-outline
+    human_friendly_id:
+      - name__value
+    default_filter: name__value
+    display_labels:
+      - name__value
+    order_by:
+      - expires_at__value
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+      - name: reason
+        kind: TextArea
+        description: Why the violation is sanctioned, and what removes the need for it
+      - name: requested_by
+        kind: Text
+        description: The SUBJECT's owner
+      - name: approved_by
+        kind: Text
+        optional: true
+        description: The TARGET's owner - must be set before the branch merges (review check owed)
+      - name: expires_at
+        kind: DateTime
+        description: "Hard expiry: past this instant the finding returns. Renewal = a new reviewed waiver."
+      - name: subject_scope
+        kind: Text
+        optional: true
+        description: Device/site selector - narrows an intent/contract subject, or stands alone as the subject
+    relationships:
+      - name: waived_policy
+        peer: IntentPolicy
+        identifier: waiver__policy
+        cardinality: one
+        kind: Generic
+        optional: true
+        description: The TARGET, when it is a policy - exactly one of waived_policy/waived_invariant must be set
+      - name: waived_invariant
+        peer: IntentInvariant
+        identifier: waiver__invariant
+        cardinality: one
+        kind: Generic
+        optional: true
+        description: The TARGET, when it is an invariant - exactly one of waived_policy/waived_invariant must be set
+      - name: subject_intent
+        peer: IntentDefinition
+        identifier: waiver__subject_intent
+        cardinality: one
+        kind: Generic
+        optional: true
+        description: The SUBJECT, when it is a whole intent
+      - name: subject_contract
+        peer: IntentContract
+        identifier: waiver__subject_contract
+        cardinality: one
+        kind: Generic
+        optional: true
+        description: The SUBJECT, when it is one contract (optionally narrowed by subject_scope)
+
+  # ---- Free-form starter implementations -----------------------------------
+  # Instantiable out of the box: terms live in Objective expressions.
+  # Domain-typed kinds (e.g. a routing contract) inherit the same generics
+  # and encode their terms as native attributes instead - both answer the
+  # same platform queries, because the queries target the generics.
+
+  - name: GenericContract
+    namespace: Intent
+    label: Contract (free-form)
+    description: General-purpose contract; every term is an Objective expression.
+    icon: mdi:file-sign
+    inherit_from:
+      - IntentContract
+
+  - name: GenericPolicy
+    namespace: Intent
+    label: Policy (free-form)
+    description: General-purpose policy; the rule lives in description/enforcement, checks implement it.
+    icon: mdi:gavel
+    inherit_from:
+      - IntentPolicy
+
+  - name: GenericInvariant
+    namespace: Intent
+    label: Invariant (free-form)
+    description: General-purpose invariant; the condition lives in expression.
+    icon: mdi:shield-check
+    inherit_from:
+      - IntentInvariant

@@ -289,8 +289,9 @@ always with an expiry check first.
 ## A worked example
 
 One intent, all four instruments, walked through the enforcement matrix.
-Sketched in Infrahub-schema shape (this becomes
-`infrahub/schemas/intent_model.yml` once the correlations are ratified):
+The node kinds are real — `infrahub/schemas/intent_model.yml` implements
+this model (`infrahub/schemas/README.md` explains how to build around it);
+below is the example in condensed shape:
 
 ```yaml
 intent:
