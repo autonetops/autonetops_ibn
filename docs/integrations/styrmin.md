@@ -117,6 +117,123 @@ helm install ibn infra/helm/autonetops-ibn \
   --set persistence.enabled=true
 ```
 
+## Runbook: fully private setup (private repo + private registry)
+
+The sequence below was validated end-to-end on 2026-07-14 against a local
+styrmin vcluster and is written to be reusable for any private project with a
+private image. Substitute `<app>` (driver/chart/deployment name), `<org>`
+(GitHub org), and `<ns>` (styrmin's own namespace, usually `styrmin`).
+
+**Prerequisites**: a GitHub PAT with `repo` read (for the driver clone) and
+`read:packages`/`write:packages` (for GHCR); `kubectl` pointed at the styrmin
+cluster; the styrmin admin credentials.
+
+1. **Publish image and chart** (both may stay private):
+
+   ```shell
+   docker build -t ghcr.io/<org>/<app>:<version> .
+   docker push ghcr.io/<org>/<app>:<version>
+   helm registry login ghcr.io -u <user> --password-stdin   # paste the PAT
+   helm package <chart-dir>
+   helm push <app>-<version>.tgz oci://ghcr.io/<org>/charts
+   ```
+
+2. **Give the styrmin server the git token** — `load-version` clones on the
+   server, there are no client-side credential flags. In the bundled chart the
+   token lives in the `styrmin-secrets` Secret under the `driver-token` key
+   (it exists but is *empty* by default — this yields the misleading
+   "credentials" failure on load):
+
+   ```shell
+   kubectl -n <ns> patch secret styrmin-secrets \
+     -p '{"stringData":{"driver-token":"<github-PAT>"}}'
+   kubectl -n <ns> rollout restart deploy styrmin-server
+   ```
+
+3. **Load the driver** (`driver.styrmin.yml` must be at the repo root; each
+   load pins the branch-tip commit as an immutable driver version — reload
+   after every push you want picked up). Non-interactive auth is env-var
+   based:
+
+   ```shell
+   export STYRMIN_SERVER_ADDRESS=http://styrmin.local.styrmin.io:8080
+   export STYRMIN_USERNAME=admin STYRMIN_PASSWORD=<admin-password>
+   uv run styrminctl drivers load-version https://github.com/<org>/<app> main
+   ```
+
+4. **Pre-create the chart-pull credential** in styrmin's namespace (used in
+   step 6):
+
+   ```shell
+   kubectl -n <ns> create secret docker-registry ghcr-auth \
+     --docker-server=ghcr.io --docker-username=<user> --docker-password=<PAT>
+   ```
+
+5. **Create the deployment** via a manifest so parameters and env vars go in
+   one shot (`styrminctl deployments apply -f deploy.yaml`):
+
+   ```yaml
+   apiVersion: styrmin/v1
+   kind: Deployment
+   metadata:
+     name: <app>
+   spec:
+     driver: <app>
+     version: "<version>"
+     environment: <environment-name>
+     config:
+       envVars:
+         - name: INFRAHUB_API_TOKEN
+           value: "<token>"
+     parameters:
+       infrahub_address: "https://<your-infrahub>"
+       sot_repo_url: "https://github.com/<org>/<sot-repo>"
+       sot_repo_ref: "main"
+       image_pull_secret: "ghcr-pull"
+   ```
+
+6. **Patch the Flux HelmRepository with the chart credential.** Styrmin
+   templates the `HelmRepository` *without* `secretRef` (no private-OCI
+   support upstream — `services/helm/templates/repository_spec.j2`), so the
+   chart pull fails with `401 Unauthorized` until you patch it. The patch
+   also triggers an immediate retry:
+
+   ```shell
+   kubectl -n <ns> get helmrepositories        # find the styrmin-<uuid> name
+   kubectl -n <ns> patch helmrepository styrmin-<uuid> --type=merge \
+     -p '{"spec":{"secretRef":{"name":"ghcr-auth"}}}'
+   ```
+
+   ⚠️ The patch lives on an operator-owned object: a future deployment
+   update may recreate the HelmRepository without it. Re-check on upgrade.
+
+7. **Create the image-pull secret in the deployment's namespace.** Styrmin
+   creates one namespace per deployment, named `styrmin-<deployment-uuid>`
+   (it appears seconds after step 5; an early `ImagePullBackOff` self-heals
+   once the secret exists):
+
+   ```shell
+   kubectl get ns | grep styrmin-        # find the deployment namespace
+   kubectl -n styrmin-<deployment-uuid> create secret docker-registry ghcr-pull \
+     --docker-server=ghcr.io --docker-username=<user> --docker-password=<PAT>
+   ```
+
+8. **Verify the chain** — each link, in order:
+
+   ```shell
+   kubectl -n <ns> get helmcharts              # READY True, "pulled ... chart"
+   kubectl -n styrmin-<deployment-uuid> get helmrelease,pods
+   kubectl -n styrmin-<deployment-uuid> logs -l app.kubernetes.io/name=<app> --tail=20
+   ```
+
+   Note: the HelmRelease may keep showing a *stale* chart-pull error for a
+   minute after step 6 — trust the HelmChart's own status, not the
+   HelmRelease message.
+
+To update the running deployment later (new env var, parameter, version),
+edit the manifest and re-run `styrminctl deployments apply -f deploy.yaml` —
+config changes roll the pod automatically.
+
 ## Known limitations
 
 - The plans directory (`/data/plans`) is a PVC, not a git remote: the
