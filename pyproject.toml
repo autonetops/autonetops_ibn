@@ -1,0 +1,35 @@
+[project]
+name = "autonetops-ibn"
+version = "0.1.0"
+description = "Intent-Based Networking platform around Infrahub: planner, orchestrator, executor, validator"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "autonetops-planner",
+    "autonetops-orchestrator",
+    "autonetops-executor[infrahub]",
+    "autonetops-validator",
+    "autonetops-ibnctl",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+    # infrahub-sdk registers a pytest plugin that imports jinja2 at collection time
+    "jinja2>=3.1",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.uv.sources]
+autonetops-planner = { workspace = true }
+autonetops-orchestrator = { workspace = true }
+autonetops-executor = { workspace = true }
+autonetops-validator = { workspace = true }
+autonetops-ibnctl = { workspace = true }
+
+[tool.uv.workspace]
+members = ["planner", "orchestrator", "executor", "validator", "tools/ibnctl"]

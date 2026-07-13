@@ -1,0 +1,9 @@
+apiVersion: v2
+name: autonetops-ibn
+description: >-
+  AutoNetOps Intent-Based Networking platform: the closed-loop automation
+  layer (planner, orchestrator, executor, validator) around Infrahub.
+  Deploys the orchestrator reconcile service (ibn-orchestrate watch).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

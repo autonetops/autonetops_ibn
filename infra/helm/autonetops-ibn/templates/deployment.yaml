@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "autonetops-ibn.fullname" . }}
+  labels:
+    {{- include "autonetops-ibn.labels" . | nindent 4 }}
+spec:
+  # The watch loop keeps single-writer state (.watch-state.json) in the plans
+  # directory; running more than one replica would race plan dispatch.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "autonetops-ibn.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "autonetops-ibn.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.sotRepo.gitUrl }}
+      initContainers:
+        - name: clone-sot-repo
+          image: docker.io/alpine/git:latest
+          args:
+            - clone
+            - --depth=1
+            - --branch
+            - {{ .Values.sotRepo.gitRef | quote }}
+            - {{ .Values.sotRepo.gitUrl | quote }}
+            - /data/sot-repo
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      {{- end }}
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: INFRAHUB_ADDRESS
+              value: {{ .Values.infrahub.address | quote }}
+            {{- if .Values.infrahub.existingTokenSecret.name }}
+            - name: INFRAHUB_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infrahub.existingTokenSecret.name }}
+                  key: {{ .Values.infrahub.existingTokenSecret.key }}
+            {{- else if .Values.infrahub.apiToken }}
+            - name: INFRAHUB_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "autonetops-ibn.fullname" . }}
+                  key: INFRAHUB_API_TOKEN
+            {{- end }}
+            - name: IBN_PLANS_DIR
+              value: /data/plans
+            - name: IBN_SOT_REPO
+              value: /data/sot-repo
+            {{- range $name, $value := .Values.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "autonetops-ibn.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -51,6 +51,10 @@ jobs:
           for p in pathlib.Path('.').rglob('*.y*ml'):
               if '.git' in p.parts:
                   continue
+              # Templated YAML is not plain YAML: Helm chart templates and
+              # Jinja2 value templates (Styrmin driver values.j2.yml).
+              if p.name.endswith('.j2.yml') or ('helm' in p.parts and 'templates' in p.parts):
+                  continue
               try:
                   list(yaml.safe_load_all(p.read_text()))
               except yaml.YAMLError as e:

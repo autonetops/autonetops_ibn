@@ -1,0 +1,71 @@
+---
+# Styrmin Application Driver for the AutoNetOps IBN platform.
+#
+# This file makes the repository loadable by Styrmin as a git-sourced driver:
+#   styrminctl drivers load-version <this-repo-url> <branch>
+# See docs/integrations/styrmin.md for the full build/publish/load workflow.
+apiVersion: "styrmin.io/v1"
+kind: ApplicationDriver
+metadata:
+  name: autonetops-ibn
+spec:
+  version: "1"
+  supported_versions: ">=0.1,<1.0"
+  info:
+    description: >-
+      AutoNetOps Intent-Based Networking platform — the closed-loop
+      automation layer (planner, orchestrator, executor, validator)
+      around Infrahub.
+    authors: [autonetops]
+    links:
+      - link: Repository
+        url: 'https://github.com/autonetops/autonetops_ibn'
+
+  helm:
+    # The chart source lives in infra/helm/autonetops-ibn/ in this repo and
+    # must be published somewhere the Styrmin server can resolve (OCI/HTTP).
+    main:
+      location: oci://ghcr.io/autonetops/charts/autonetops-ibn
+      version: 0.1.0
+
+  components:
+    orchestrator:
+      identifier:
+        label:
+          app.kubernetes.io/name: autonetops-ibn
+
+  parameters:
+    - name: infrahub_address
+      label: "Infrahub address"
+      kind: string
+      default: "http://styrmin-infrahub:8000"
+    - name: sot_repo_url
+      label: "SoT repository git URL (cloned to IBN_SOT_REPO at startup)"
+      kind: string
+      default: ""
+    - name: sot_repo_ref
+      label: "SoT repository git ref"
+      kind: string
+      default: "main"
+
+  env_vars:
+    - name: INFRAHUB_API_TOKEN
+      description: >-
+        API token the orchestrator uses against Infrahub. Set as a
+        deployment-level env var; it reaches the orchestrator container via
+        the chart's extraEnv.
+      level: deployment
+    - name: IBN_POLICIES_DIR
+      description: >-
+        Override the planner policies directory. Defaults to the policy set
+        baked into the image (/app/planner/policies).
+      level: deployment
+
+  container_overrides:
+    - component: orchestrator
+      container: orchestrator
+      command: true
+      args: true
+      description: >-
+        Override the orchestrator entrypoint/args, e.g. to change the watch
+        poll interval or run a one-shot subcommand for debugging.

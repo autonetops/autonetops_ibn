@@ -1,0 +1,51 @@
+image:
+  repository: ghcr.io/autonetops/autonetops-ibn
+  # Defaults to the chart appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+fullnameOverride: ""
+nameOverride: ""
+
+# Container entrypoint overrides. Both keys are consumed with `with` guards, so
+# an empty list falls through to the image ENTRYPOINT/CMD
+# (`ibn-orchestrate watch --interval 15`).
+command: []
+args: []
+
+infrahub:
+  # Address of the Infrahub instance this platform closes the loop around.
+  address: http://infrahub:8000
+  # Inline API token — for lab/dev only. Prefer existingTokenSecret.
+  apiToken: ""
+  # Reference an existing Secret holding the Infrahub API token.
+  existingTokenSecret:
+    name: ""
+    key: INFRAHUB_API_TOKEN
+
+sotRepo:
+  # When set, an init container clones the SoT repository (the Infrahub-synced
+  # repo with queries/ and transforms/) into the data volume at /data/sot-repo
+  # before the orchestrator starts. IBN_SOT_REPO points there.
+  gitUrl: ""
+  gitRef: main
+
+persistence:
+  # Persist /data (plan bundles under /data/plans, SoT checkout under
+  # /data/sot-repo). When disabled an emptyDir is used — plan state is lost on
+  # pod restart, acceptable only for labs.
+  enabled: false
+  storageClass: ""
+  size: 1Gi
+
+# Extra static environment variables, map form: {NAME: value}.
+env: {}
+# Extra environment variables, list form ([{name: ..., value: ...}]). The
+# styrmin driver injects per-component env vars through this key.
+extraEnv: []
+
+resources: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

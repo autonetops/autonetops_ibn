@@ -1,0 +1,28 @@
+fullnameOverride: styrmin-autonetops-ibn
+
+image:
+  repository: ghcr.io/autonetops/autonetops-ibn
+  tag: "{{ app.version }}"
+
+# Operator-supplied container entrypoint/args overrides for the orchestrator
+# component. Emitted unconditionally so that clearing an override propagates
+# through the JSON merge-patch HelmRelease apply; the chart guards both keys
+# with `with`, so an empty list falls through to the image default
+# (`ibn-orchestrate watch --interval 15`).
+command: {{ components | component_command("orchestrator") | tojson }}
+args: {{ components | component_args("orchestrator") | tojson }}
+
+# Deployment/environment env vars (e.g. INFRAHUB_API_TOKEN) merged per
+# component by Styrmin.
+extraEnv: {{ components | component_env_vars("orchestrator") | tojson }}
+
+infrahub:
+  address: "{{ parameters.infrahub_address }}"
+
+sotRepo:
+  gitUrl: "{{ parameters.sot_repo_url }}"
+  gitRef: "{{ parameters.sot_repo_ref }}"
+
+persistence:
+  enabled: true
+  storageClass: "{{ cluster.config.standard_storage.storage_class }}"

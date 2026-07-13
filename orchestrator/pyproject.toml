@@ -20,6 +20,11 @@ dev = ["pytest>=8.0", "ruff>=0.5"]
 [project.scripts]
 ibn-orchestrate = "autonetops_orchestrator.cli:main"
 
+[tool.uv.sources]
+autonetops-planner = { workspace = true }
+autonetops-executor = { workspace = true }
+autonetops-validator = { workspace = true }
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

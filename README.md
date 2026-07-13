@@ -86,6 +86,20 @@ autonetops_ibn/
   `docs/architecture/runtime-topology.md`
 - Why things are the way they are → `docs/adr/`
 - Operating the system → `docs/runbooks/`
+- Deploying the platform through Styrmin (Application Driver, Helm chart,
+  container image) → `docs/integrations/styrmin.md`
+
+## Working on the Python packages
+
+The five packages (`planner`, `orchestrator`, `executor`, `validator`,
+`tools/ibnctl`) form a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/)
+rooted at the top-level `pyproject.toml`:
+
+```
+uv sync          # create .venv with all packages + dev tools
+uv run pytest planner/tests executor/tests orchestrator/tests validator/tests
+uv run ruff check planner executor orchestrator validator tools
+```
 
 ## Status
 
