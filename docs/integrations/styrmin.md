@@ -51,10 +51,38 @@ The image tag doubles as the *application version* in Styrmin: the driver's
 `supported_versions` range (`>=0.1,<1.0`) must cover it, and `values.j2.yml`
 sets `image.tag: {{ app.version }}`.
 
+## Private repository and registry
+
+This repo and its GHCR packages are private, which affects all three pull
+paths:
+
+- **Driver load (git)**: `styrminctl drivers load-version` clones on the
+  *server* side; there are no client-side credential flags. The Styrmin
+  server must hold a GitHub token with read access to this repo in
+  `STYRMIN_DRIVER_TOKEN` — in the bundled Styrmin Helm chart it is read from
+  a Kubernetes Secret in the `styrmin` namespace, created before
+  `helm upgrade --install`. Until that's configured, use the local
+  alternative: mount/copy the three driver files into the server container
+  and run `styrminctl drivers load-local-version <in-container-path>`.
+- **Chart pull (OCI)**: the Styrmin server resolves
+  `spec.helm.main.location` itself. Either make the
+  `ghcr.io/autonetops/charts/autonetops-ibn` package public, or configure the
+  server's Helm registry credentials accordingly.
+- **Image pull (Kubernetes)**: the kubelet needs credentials for
+  `ghcr.io/autonetops/autonetops-ibn`. Either make the package public, or
+  create a docker-registry Secret in the deployment's namespace and pass its
+  name through the `image_pull_secret` driver parameter (chart value
+  `imagePullSecrets`).
+
+The no-credentials path is to make both GHCR packages public
+(GitHub → Package settings → Change visibility); the git repo itself can
+stay private once `STYRMIN_DRIVER_TOKEN` is set.
+
 ## Loading the driver and deploying
 
 ```shell
-# Load this repo as a driver (driver.styrmin.yml is read from the repo root)
+# Load this repo as a driver (driver.styrmin.yml is read from the repo
+# root; requires STYRMIN_DRIVER_TOKEN on the server — see above)
 styrminctl drivers load-version https://github.com/autonetops/autonetops_ibn main
 
 # Create a deployment of application version 0.1.0

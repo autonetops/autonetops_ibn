@@ -4,6 +4,10 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+# Names of pre-existing docker-registry Secrets in the release namespace,
+# needed when the image registry is private: [{name: my-pull-secret}]
+imagePullSecrets: []
+
 fullnameOverride: ""
 nameOverride: ""
 

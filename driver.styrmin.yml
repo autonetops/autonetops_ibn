@@ -47,6 +47,10 @@ spec:
       label: "SoT repository git ref"
       kind: string
       default: "main"
+    - name: image_pull_secret
+      label: "Image pull secret (pre-existing docker-registry Secret in the deployment namespace, required while the image registry is private)"
+      kind: string
+      default: ""
 
   env_vars:
     - name: INFRAHUB_API_TOKEN

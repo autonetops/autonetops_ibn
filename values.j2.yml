@@ -4,6 +4,15 @@ image:
   repository: ghcr.io/autonetops/autonetops-ibn
   tag: "{{ app.version }}"
 
+# Emitted unconditionally (empty list when unset) so clearing the parameter
+# propagates through the merge-patch HelmRelease apply.
+{%- if parameters.image_pull_secret %}
+imagePullSecrets:
+  - name: "{{ parameters.image_pull_secret }}"
+{%- else %}
+imagePullSecrets: []
+{%- endif %}
+
 # Operator-supplied container entrypoint/args overrides for the orchestrator
 # component. Emitted unconditionally so that clearing an override propagates
 # through the JSON merge-patch HelmRelease apply; the chart guards both keys
