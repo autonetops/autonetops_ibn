@@ -24,7 +24,8 @@ mutation RecordPlan(
   $blast_radius: String!, $device_count: BigInt!,
   $base_branch: String!, $candidate_branch: String!,
   $dispatched_at: String!, $emergency_override: Boolean!,
-  $pre_approved_class: String!, $detail: String!
+  $pre_approved_class: String!, $detail: String!,
+  $profile_name: String!, $profile_version: String!, $profile_checksum: String!
 ) {
   OpsPlanRecordUpsert(data: {
     plan_id: {value: $plan_id},
@@ -37,7 +38,10 @@ mutation RecordPlan(
     dispatched_at: {value: $dispatched_at},
     emergency_override: {value: $emergency_override},
     pre_approved_class: {value: $pre_approved_class},
-    detail: {value: $detail}
+    detail: {value: $detail},
+    profile_name: {value: $profile_name},
+    profile_version: {value: $profile_version},
+    profile_checksum: {value: $profile_checksum}
   }) {
     ok
     object { id }
@@ -73,6 +77,9 @@ def record_dispatch(
     Never raises: the rollout outcome is already decided by the time this
     runs, and a feedback failure must not turn a green dispatch red. It is
     recorded in evidence either way."""
+    # which policy pack produced the plan (ADR-0016): "which profile version
+    # drove every change last quarter" becomes a SoT query
+    profile = getattr(plan.policy_evaluation, "profile", None)
     variables = {
         "plan_id": plan.id,
         "status": report.status,
@@ -86,6 +93,9 @@ def record_dispatch(
         "emergency_override": decision.emergency_override,
         "pre_approved_class": decision.pre_approved_class or "",
         "detail": _detail_line(report),
+        "profile_name": (f"{profile.tenant}/{profile.name}" if profile else ""),
+        "profile_version": (profile.version if profile else ""),
+        "profile_checksum": (profile.checksum if profile else ""),
     }
     try:
         result = client.execute_graphql(query=UPSERT_MUTATION, variables=variables)

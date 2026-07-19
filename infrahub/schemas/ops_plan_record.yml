@@ -55,3 +55,15 @@ nodes:
         kind: TextArea
         optional: true
         description: Per-stage outcomes, gate verdicts, abort reason
+      - name: profile_name
+        kind: Text
+        optional: true
+        description: Intent profile that produced the plan, as tenant/name (ADR-0016)
+      - name: profile_version
+        kind: Text
+        optional: true
+        description: Pack content version (meta.version) at plan time
+      - name: profile_checksum
+        kind: Text
+        optional: true
+        description: sha256 over the resolved profile; identity from bytes, not claims

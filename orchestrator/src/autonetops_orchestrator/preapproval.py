@@ -11,6 +11,11 @@ module owns the orchestrator-side duties around it:
   own, so an empty approvals list is honored only when the bytes still prove
   the claimed class under the CURRENT policy — which also makes the per-class
   kill switch (enabled: false) effective for already-planned bundles.
+
+ADR-0016 extends the same discipline to the whole profile: the frozen
+bundle is testimony, the CURRENT pack is judge, and verdicts only tighten —
+approval floors union in, and the blast classification is re-derived under
+the current thresholds with the pinned class as a floor, never a ceiling.
 """
 
 from __future__ import annotations
@@ -21,18 +26,21 @@ from pathlib import Path
 
 import yaml
 
-from autonetops_planner.change_classes import (
-    ChangeClassPolicy,
-    classify_changes,
-)
-from autonetops_planner.models import ChangeItem, ChangeSet
-from autonetops_planner.policies import CanaryStrategy
+from autonetops_planner.change_classes import classify_changes
+from autonetops_planner.models import BlastRadiusClass, ChangeItem, ChangeSet
+from autonetops_planner.profile import ResolvedProfile
 
 from .strategy import Decision
 
 # The name is deliberately un-satisfiable by accident: it surfaces in the
 # "missing approvals: ..." abort when a pre-approval claim cannot be checked.
 UNVERIFIABLE = "unverifiable-pre-approval"
+
+BLAST_ORDER = {
+    BlastRadiusClass.LOW: 0,
+    BlastRadiusClass.MODERATE: 1,
+    BlastRadiusClass.HIGH: 2,
+}
 
 
 def _sha256(text: str) -> str:
@@ -117,16 +125,36 @@ def _frozen_content_for(plan_dir: Path):
     return content_for
 
 
-def verify_pre_approval(plan_dir: Path, plan, policy: ChangeClassPolicy) -> bool:
+def effective_blast(plan, profile: ResolvedProfile) -> BlastRadiusClass:
+    """The blast class dispatch must honor: max(pinned, recomputed-under-
+    current-thresholds). The pinned class is a floor, never a ceiling — a
+    customer that tightens thresholds after planning bites already-planned
+    bundles, symmetric with the change-class kill switch (ADR-0016).
+
+    Recomputation is a pure function over the frozen plan's own recorded
+    device/region lists; no ChangeSet rebuild, no SoT round trip."""
+    recorded = plan.blast_radius
+    thresholds = profile.thresholds
+    devices, regions = recorded.device_count, len(recorded.regions)
+    if devices >= thresholds.high_min_devices or regions >= thresholds.high_min_regions:
+        recomputed = BlastRadiusClass.HIGH
+    elif devices <= thresholds.low_max_devices:
+        recomputed = BlastRadiusClass.LOW
+    else:
+        recomputed = BlastRadiusClass.MODERATE
+    return max(recorded.classification, recomputed, key=BLAST_ORDER.__getitem__)
+
+
+def verify_pre_approval(plan_dir: Path, plan, profile: ResolvedProfile) -> bool:
     """Does the frozen bundle still prove the plan's pre-approval claim under
-    the current change-class policy?"""
+    the current profile's change classes (and current thresholds)?"""
     claimed = plan.policy_evaluation.pre_approved
     if claimed is None:
         return False
     result = classify_changes(
         plan_changeset(plan),
-        plan.blast_radius.classification,
-        policy,
+        effective_blast(plan, profile),
+        profile.change_classes,
         _frozen_content_for(plan_dir),
     )
     return result is not None and result.change_class.name == claimed.class_name
@@ -136,31 +164,46 @@ def tighten_approvals(
     plan,
     decision: Decision,
     plan_dir: Path,
-    policy: ChangeClassPolicy,
-    strategies: list[CanaryStrategy],
+    profile: ResolvedProfile,
 ) -> tuple[list[str], list[str], bool | None]:
-    """The dispatch-time approval bar (ADR-0014 §5): the recorded decision can
-    only tighten, never loosen. Returns (approvals_required, notes,
-    claim_verified) — claim_verified is None when the plan claims nothing;
-    False means the caller must not present the plan as pre-approved."""
+    """The dispatch-time approval bar (ADR-0014 §5, extended by ADR-0016):
+    the recorded decision can only tighten, never loosen. Returns
+    (approvals_required, notes, claim_verified) — claim_verified is None
+    when the plan claims nothing; False means the caller must not present
+    the plan as pre-approved.
+
+    Three floors union into the bar, whatever the claim's fate:
+    the frozen decision's own list, the plan's recorded plan-time bar
+    (policy_evaluation.approvals_required), and — for unverified/unclaimed
+    plans — the CURRENT pack's strategy approvals + blast-class floor,
+    under the re-tightened blast class."""
     required = set(decision.approvals_required)
     notes: list[str] = []
+    blast = effective_blast(plan, profile)
+    if blast != plan.blast_radius.classification:
+        notes.append(
+            f"blast radius re-tightened under current thresholds: "
+            f"{plan.blast_radius.classification.value} -> {blast.value}"
+        )
     strategy = next(
-        (s for s in strategies if s.name == plan.policy_evaluation.canary_strategy),
+        (s for s in profile.strategies
+         if s.name == plan.policy_evaluation.canary_strategy),
         None,
     )
+    recorded_bar = set(getattr(plan.policy_evaluation, "approvals_required", []) or [])
+    current_floor = set(profile.floors.for_class(blast))
     claimed = plan.policy_evaluation.pre_approved
 
     if claimed is not None:
-        if verify_pre_approval(plan_dir, plan, policy):
+        if verify_pre_approval(plan_dir, plan, profile):
             notes.append(
                 f"pre-approval re-verified from frozen content: "
                 f"class {claimed.class_name!r}"
             )
             return sorted(required), notes, True
-        if not policy.classes:
+        if not profile.change_classes.classes:
             notes.append(
-                "no change-class policy loaded at dispatch time "
+                "no change classes in the current profile "
                 "(set --policies-dir or IBN_POLICIES_DIR); "
                 "treating the pre-approval claim as unverified"
             )
@@ -168,6 +211,7 @@ def tighten_approvals(
             f"pre-approval claim {claimed.class_name!r} did NOT re-verify "
             f"under the current policy; tightening"
         )
+        required |= recorded_bar | current_floor
         if strategy is None:
             required.add(UNVERIFIABLE)
             notes.append(
@@ -176,18 +220,21 @@ def tighten_approvals(
             )
         else:
             required.update(strategy.requires_approvals)
-            if not strategy.requires_approvals:
+            if not required:
                 notes.append(
                     "strategy floor requires no approvals; "
                     "proceeding un-pre-approved"
                 )
         return sorted(required), notes, False
 
-    # no claim: still enforce the strategy floor - decision.yaml is editable
-    if strategy is not None and not set(strategy.requires_approvals) <= required:
-        required.update(strategy.requires_approvals)
+    # no claim: still enforce the floors - decision.yaml is editable
+    floor = recorded_bar | current_floor
+    if strategy is not None:
+        floor |= set(strategy.requires_approvals)
+    if not floor <= required:
+        required |= floor
         notes.append(
-            f"decision carried fewer approvals than strategy "
-            f"{strategy.name!r} requires; tightened to the floor"
+            "decision carried fewer approvals than the current floor "
+            "(strategy + blast-class floor + plan-time bar); tightened"
         )
     return sorted(required), notes, None

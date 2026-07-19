@@ -61,8 +61,20 @@ spec:
       level: deployment
     - name: IBN_POLICIES_DIR
       description: >-
-        Override the planner policies directory. Defaults to the policy set
-        baked into the image (/app/planner/policies).
+        Intent profile pack for this deployment (ADR-0016): a directory
+        containing profile.yaml. The customer pattern is a policy-pack/
+        directory inside the SoT repo the sot_repo_url init container
+        clones, e.g. /data/sot-repo/policy-pack - one reviewed source for
+        plan AND dispatch. Defaults to the reference pack baked into the
+        image (/app/planner/policies).
+      level: deployment
+    - name: IBN_TENANT
+      description: >-
+        Tenant guard (ADR-0016, optional): when set, the orchestrator
+        refuses packs and plan bundles whose recorded tenant differs -
+        cross-tenant reuse fails loudly instead of executing quietly.
+        Set it to the customer's pack meta.tenant in per-customer
+        deployments.
       level: deployment
 
   container_overrides:
