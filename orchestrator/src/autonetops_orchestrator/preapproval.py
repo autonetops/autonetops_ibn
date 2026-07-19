@@ -231,6 +231,15 @@ def tighten_approvals(
     floor = recorded_bar | current_floor
     if strategy is not None:
         floor |= set(strategy.requires_approvals)
+    else:
+        # An unclaimed plan went through human review, so a vanished
+        # strategy is an anomaly to surface, not a reason to brick the
+        # bundle - floors and the recorded bar still apply.
+        notes.append(
+            f"canary strategy {plan.policy_evaluation.canary_strategy!r} "
+            f"unknown to the current profile; floors and the plan-time bar "
+            f"still apply"
+        )
     if not floor <= required:
         required |= floor
         notes.append(

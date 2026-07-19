@@ -399,6 +399,15 @@ def load_profile(
     if policies_dir is None:
         return _load_builtin_baseline()
     directory = Path(policies_dir)
+    if not directory.is_dir():
+        # F14: a configured-but-missing pack (failed SoT clone, path typo)
+        # must never quietly become the lenient legacy profile - that would
+        # evaporate the customer's entire policy surface without a sound.
+        raise ProfileError(
+            str(directory),
+            ["policies dir does not exist (failed clone or path typo?); "
+             "refusing to plan without the configured pack"],
+        )
     if (directory / "profile.yaml").exists():
         profile = _load_pack(directory)
         if tenant and profile.ref.tenant != tenant:
@@ -610,7 +619,22 @@ def _canary_models(
     loaded = _load_model_file(
         directory / filename, CanaryStrategiesFile, violations, "canary_strategies"
     )
-    return list(loaded.strategies) if loaded else []
+    if loaded is None:
+        return []
+    # Duplicates must be caught per FILE, before the by-name merge silently
+    # collapses them last-wins - a copy-pasted strategy quietly replacing
+    # the reviewed rollout shape is exactly the bug this contract exists
+    # to prevent.
+    seen: set[str] = set()
+    for model in loaded.strategies:
+        if model.name in seen:
+            violations.append(
+                f"canary_strategies ({filename}): strategy {model.name!r} "
+                f"defined twice in one file; the second definition would "
+                f"silently win"
+            )
+        seen.add(model.name)
+    return list(loaded.strategies)
 
 
 def _delivery_platforms(

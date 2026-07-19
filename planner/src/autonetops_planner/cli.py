@@ -42,9 +42,11 @@ def plan_command(
     ),
     infrahub_url: Optional[str] = typer.Option(None, envvar="INFRAHUB_ADDRESS"),
     infrahub_token: Optional[str] = typer.Option(None, envvar="INFRAHUB_API_TOKEN"),
+    # Deliberately NOT wired to IBN_POLICIES_DIR: this CLI is the offline /
+    # ad-hoc tool and its behavior must not change with ambient environment;
+    # the env var belongs to the ibn-orchestrate service (ADR-0014/0016).
     policies_dir: Optional[Path] = typer.Option(
         None,
-        envvar="IBN_POLICIES_DIR",
         help="Policy pack (dir with profile.yaml) or legacy policy YAML dir",
     ),
     tenant: Optional[str] = typer.Option(
@@ -216,8 +218,10 @@ def validate_pack(
     infrahub_token: Optional[str] = typer.Option(None, envvar="INFRAHUB_API_TOKEN"),
 ) -> None:
     """Validate an intent profile pack (ADR-0016). This is the CI gate a
-    customer pack must pass before the engine honors it; all findings are
-    fatal except the SoT check, which runs only when Infrahub is reachable."""
+    customer pack must pass before the engine honors it. All findings are
+    fatal, including the SoT conformance check - which runs only when
+    Infrahub credentials are provided (wire it in pack CI once the SoT is
+    reachable from there; it is required clean at onboarding)."""
     try:
         profile = load_profile(pack_dir)
     except ProfileError as exc:

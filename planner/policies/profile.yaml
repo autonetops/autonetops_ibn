@@ -21,6 +21,15 @@ meta:
 extends: builtin:baseline
 requires_planner: ">=0.1,<0.2"
 
+platforms:
+  # Historically-supported platforms beyond the baseline's driver-mapped
+  # set, pinned explicitly because this pack is strict: these reproduce
+  # exactly what the legacy guess produced (driver = platform name,
+  # rollback = manual) - now as reviewed data instead of a fallback.
+  # The executor still refuses steps whose driver has no registry entry.
+  cisco_iosxe: {driver: cisco_iosxe, rollback: manual}
+  frr: {driver: frr, rollback: manual}
+
 files:
   canary_strategies: canary_strategies.yaml    # draft (empty) = inherit baseline
   change_classes: change_classes.yaml          # never inherited: reviewed HERE

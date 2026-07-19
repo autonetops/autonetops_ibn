@@ -93,7 +93,15 @@ def watch_loop(
 
             if pc_state == "open" and "plan_dir" not in record:
                 echo(f"[watch] proposed change {name!r} ({branch}) is open - planning")
-                plan_dir, plan, _decision = plan_fn(branch)
+                try:
+                    plan_dir, plan, _decision = plan_fn(branch)
+                except Exception as exc:  # noqa: BLE001 - one bad branch or a
+                    # broken pack must never kill the reconcile service; the
+                    # failure is echoed every pass until someone fixes it,
+                    # and planning retries next interval (self-healing).
+                    echo(f"[watch] {name!r}: planning failed - {exc}")
+                    state.pop(pc_id, None)  # leave no half-record behind
+                    continue
                 record["plan_dir"] = str(plan_dir) if plan_dir else None
                 record["plan_id"] = plan.id if plan else None
                 _save_state(state_path, state)

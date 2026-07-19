@@ -358,6 +358,9 @@ def _dispatch(
         }
         emit({"operation": "profile_drift", "target": plan.id,
               "success": True, "detail": drift})
+        decision.reasons.append(
+            f"profile drift: planned under {drift['recorded']}, "
+            f"dispatched under {drift['current']}")
         typer.echo(f"profile drift: planned under {drift['recorded']}, "
                    f"dispatching under {drift['current']} (re-proved above)")
 

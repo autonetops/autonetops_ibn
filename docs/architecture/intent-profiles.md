@@ -236,7 +236,9 @@ Never conflated:
 `autonetops-planner validate-pack <dir> [--infrahub-url U
 --infrahub-token T]` is the pack contract's teeth — the `policy-validate`
 CI job, run in the customer's pack CI and in platform CI against
-`builtin:baseline` and `planner/policies/`. The pydantic models are
+`planner/policies/` (with a `load_profile(None)` self-check of
+`builtin:baseline`, whose reserved `_platform` tenant keeps it out of
+the customer-pack path). The pydantic models are
 canonical (`extra="forbid"` everywhere); `export-schema --contract
 profile` emits `contracts/profile/v1/profile.schema.json`,
 drift-checked exactly like Plan v1. Gates, in order, all fatal:
@@ -270,14 +272,19 @@ drift-checked exactly like Plan v1. Gates, in order, all fatal:
    refuse them respectively. A class without both fixtures is invalid —
    an error, not a warning. The auto-approval surface is the one place
    a warning is insufficient.
-6. With `--infrahub-url` (advisory in pack CI, mandatory at onboarding,
-   re-runnable on demand): `sot.device_kind` is queryable with the
+6. With `--infrahub-url` (runs only when credentials are provided and
+   is fatal when it runs; required clean at onboarding, re-runnable on
+   demand): `sot.device_kind` is queryable with the
    declared paths, and every `artifacts.definitions` key exists as a
    CoreArtifact definition. Drift is a reported finding, never a silent
    divergence. (Checking that the `Intent*` generics of
    `sot.intent_model_version` are loaded and every typed kind inherits
    one is part of the onboarding checklist; automating it into this
    gate is owed.)
+
+Gates 1–4 also run inside `load_profile` itself, so every plan and
+dispatch enforces them; gates 5–6 run only here, in the pack's CI —
+golden fixtures are a merge gate on the pack, not a runtime check.
 
 ## 6. Execution-layer binding
 
@@ -314,7 +321,7 @@ testimony; the current pack is judge; verdicts only tighten:
 | Check | Rule |
 |---|---|
 | Pre-approval | re-classified from frozen `content_base/` + `content/` bytes under the **current** pack's change classes; a class disabled, removed or tightened retroactively kills auto-approval for already-planned bundles |
-| Approval bar | floor = union(frozen plan's effective approvals, current pack's strategy-by-name approvals, current floors for the effective blast class); a vanished strategy injects `UNVERIFIABLE`, but the floors provide a bar even then |
+| Approval bar | floor = union(frozen plan's effective approvals, current pack's strategy-by-name approvals, current floors for the effective blast class); a strategy vanished from the current pack injects `UNVERIFIABLE` on a failed pre-approval claim (ADR-0014's scope), and is surfaced as a note on an unclaimed plan while the floors and recorded bar still apply |
 | Blast radius | re-classified from the frozen plan's recorded device/region counts under **current** thresholds; effective class = max(pinned, recomputed) — the pinned class is a floor, never a ceiling |
 | Profile drift | checksum mismatch between the recorded `ProfileRef` and the current pack is **recorded** (`profile_drift` in `evidence.jsonl` + decision reasons) and dispatch proceeds — the rows above already re-prove everything that matters under the current pack |
 | Bad profile | profile invalid or missing where the plan records one, tenant mismatch, or `requires_planner` unsatisfied → `UNVERIFIABLE` on all pre-approval claims and a fail-closed approval hold (exit 4); never a silent baseline fallback |
@@ -410,9 +417,9 @@ Meridian again, from zero to first plan:
    `change_classes.yaml` with match/refuse fixtures, and a CODEOWNERS
    entry giving rollout approvers ownership of the directory.
 3. **Their CI.** `autonetops-planner validate-pack policy-pack/` on
-   every pull request touching the pack (gates 1–5), plus
-   `--infrahub-url` advisory runs; at onboarding the `--infrahub-url`
-   run is mandatory and must be clean.
+   every pull request touching the pack (gates 1–5); wire
+   `--infrahub-url` once the SoT is reachable from CI — at onboarding
+   that run is mandatory and must be clean.
 4. **The deployment.** The existing `sotRepo.gitUrl` init container
    already clones their SoT repo; set
    `IBN_POLICIES_DIR=/data/sot-repo/policy-pack` and

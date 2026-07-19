@@ -494,6 +494,33 @@ def test_checksum_is_formatting_insensitive_and_content_sensitive(tmp_path):
     assert load_profile(pack_c).ref.checksum != load_profile(pack_a).ref.checksum
 
 
+def test_nonexistent_policies_dir_fails_closed(tmp_path):
+    """F14: a configured-but-missing pack (failed clone, path typo) must
+    never quietly become the lenient legacy profile."""
+    with pytest.raises(ProfileError, match="does not exist"):
+        load_profile(tmp_path / "policy-pack-TYPO")
+
+
+def test_duplicate_strategy_names_in_one_file_rejected(tmp_path):
+    pack = write_pack(
+        tmp_path,
+        minimal_pack_doc(files={"canary_strategies": "canary_strategies.yaml"}),
+        canary_strategies__yaml=yaml.safe_dump(
+            {
+                "strategies": [
+                    {"name": "acme-canary", "applies_to_blast_radius": ["low"],
+                     "stages": [{"select": "one_target", "soak_minutes": 60},
+                                {"select": "remainder"}]},
+                    {"name": "acme-canary", "applies_to_blast_radius": ["low"],
+                     "stages": [{"select": "remainder"}]},
+                ]
+            }
+        ),
+    )
+    with pytest.raises(ProfileError, match="defined twice in one file"):
+        load_profile(pack)
+
+
 # -- legacy mode -------------------------------------------------------------
 
 

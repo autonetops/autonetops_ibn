@@ -65,7 +65,8 @@ bind to N packs without a code fork.
    `builtin:baseline`" — which has a name, version and checksum, so
    provenance is never blank. A dir *without* `profile.yaml` is **legacy
    mode**: today's per-file lenient semantics preserved verbatim, each
-   fallback recorded in the new `assumptions` field, one warning logged.
+   fallback recorded in the new `assumptions` field and echoed at plan
+   time.
    One new *optional* env var only: `IBN_TENANT` (decision 10).
 
 4. **Pack identity is three numbers, never conflated.**
@@ -108,14 +109,24 @@ bind to N packs without a code fork.
    blast classes, rollback names, compilable regexes, the threshold
    ladder (`low_max_devices < high_min_devices`); (4) cross-references —
    every named strategy resolves, strategies cover all three blast
-   classes, every HIGH path has non-empty effective approvals (floor F9);
+   classes, every classification-reachable HIGH strategy has non-empty
+   effective approvals (floor F9; class-only strategies with
+   `applies_to_blast_radius: []` are exempt — reachable solely via a
+   reviewed, customer-authored change class, whose review is the human
+   look);
    (5) **golden tests, mandatory**: each enabled change class must ship a
    `.match.yaml` and a `.refuse.yaml` fixture that `classify_changes`
    matches and refuses respectively — a class without both is invalid,
-   not warned; (6) with `--infrahub-url` (advisory in pack CI, mandatory
-   at onboarding): `sot.device_kind` queryable with the declared paths,
-   artifact definitions exist (generic-inheritance automation owed to
-   this gate; until then it is the onboarding checklist).
+   not warned; (6) with `--infrahub-url` (runs only when credentials are
+   provided, fatal when it runs; required clean at onboarding):
+   `sot.device_kind` queryable with the declared paths, artifact
+   definitions exist (generic-inheritance automation owed to this gate;
+   until then it is the onboarding checklist).
+
+   Enforcement split: gates 1–4 run inside `load_profile` itself, so
+   every plan and dispatch enforces them; gates 5–6 run in
+   `validate-pack` (the pack's CI) — which is why golden fixtures are a
+   merge gate on the pack, not a runtime check.
 
 8. **The review-plane rule** (loader-enforced): *an operational policy
    may ever leave pack files for the SoT if and only if its worst-case
@@ -149,8 +160,11 @@ bind to N packs without a code fork.
        pack version".
     2. *Approval bar*: floor = union(frozen plan's effective approvals,
        current pack's strategy-by-name approvals, current pack floors
-       for the effective blast class). A vanished strategy still injects
-       `UNVERIFIABLE`, but the floors provide a bar even then.
+       for the effective blast class). A strategy that vanished from the
+       current pack injects `UNVERIFIABLE` when a pre-approval claim
+       failed re-verification (ADR-0014's scope: a claim that cannot be
+       checked); on an unclaimed, human-approved plan it is surfaced as
+       a note while the floors and the recorded bar still apply.
     3. *Blast re-tightening*: classification is recomputed from the
        frozen plan's recorded device/region counts under current
        thresholds; effective class = max(pinned, recomputed). The
@@ -196,7 +210,8 @@ bind to N packs without a code fork.
     - **F8** Emergency is a named override, never a mode; a pack cannot
       mint priority or pre-authorize emergencies.
     - **F9** HIGH blast radius always has a named human somewhere;
-      `validate-pack` error otherwise.
+      load-time error otherwise (a class-only strategy's human is the
+      change-class review itself).
     - **F10** Never-by-default ladder (ADR-0012): CLI screen-scraping
       and `manual` rollback only via explicit, reviewed per-platform
       pins.
@@ -284,9 +299,9 @@ bind to N packs without a code fork.
 ## Consequences
 
 - **Planner**: new `profile.py` (models, two-layer resolve, checksum,
-  `load_profile`, legacy adapter); constants migrate into
-  `packs/baseline/` and are re-exported as views, so every existing
-  import site survives; `build_plan` gains one optional keyword-only
+  `load_profile`, legacy adapter); the constants are transcribed into
+  `packs/baseline/` and pinned equal by a golden test, so every existing
+  import site survives unchanged; `build_plan` gains one optional keyword-only
   `profile` parameter — `profile=None` is exact current behavior; in
   profile mode the `platform.lower()` driver guess and the cli-text
   fallback are deleted (unbound platform / unknown definition =
@@ -299,17 +314,20 @@ bind to N packs without a code fork.
 - **Orchestrator**: `_build` and `_dispatch` both call `load_profile`
   on the same `IBN_POLICIES_DIR` (ADR-0014 same-source, unchanged);
   bundles gain `profile.lock.yaml`; `preapproval.py` gains the
-  floors-union and blast re-tightening; `dispatch.py` gains the
-  `profile_drift` evidence record, tenant guard and exit-4 hold on a
-  bad profile; `feedback.py` + `infrahub/schemas/ops_plan_record.yml`
-  gain the three profile attributes.
+  floors-union and blast re-tightening; the CLI dispatch phase gains
+  the `profile_drift` evidence record, tenant guard and exit-4 hold on
+  a bad profile (`dispatch.py` itself is untouched); `feedback.py` +
+  `infrahub/schemas/ops_plan_record.yml` gain the three profile
+  attributes.
 - **Executor**: byte-for-byte unchanged except
   `SotInventory.driver_for` accepting injected platform bindings
   (fail-closed default unchanged). The profile never crosses the
   executor boundary; ADR-0009 is untouched.
 - **CI**: the `policy-validate` slot in `.github/workflows/ci.yaml` is
-  finally a real job — `validate-pack` on `packs/baseline` and
-  `planner/policies/`; new tests pin merge rules, checksum stability,
+  finally a real job — `validate-pack` on `planner/policies/` plus a
+  `load_profile(None)` self-check of `builtin:baseline` (the baseline's
+  reserved `_platform` tenant means it is loaded, never validated as a
+  customer pack); new tests pin merge rules, checksum stability,
   the ladder validator, legacy parity, builtin==today, and
   zero-baseline-change-classes.
 - **Deployment**: the customer pattern is
@@ -323,6 +341,13 @@ bind to N packs without a code fork.
   behaves bit-identically to today (pinned by golden test), with every
   fallback recorded in `assumptions`. Rolling back the whole feature is
   "don't add a profile.yaml". Removal of legacy mode is a future major.
+  Two deliberate carve-outs from bit-identical: bare `srlinux` now maps
+  to `snapshot_revert` like `nokia_srlinux` (same NOS, same driver; it
+  previously fell to `manual` by omission — this also changes the
+  content-addressed id of plans touching that spelling), and a
+  *nonexistent* policies dir is now a hard error instead of quietly
+  loading builtin defaults (F14: a failed SoT clone must never
+  evaporate the policy surface without a sound).
 - The "once the policy schema settles" promises in `blast_radius.py`
   and `plan_builder.py` are discharged; `compute_blast_radius`'s
   unplumbed thresholds parameter is finally plumbed.
