@@ -1,0 +1,72 @@
+# builtin:baseline — the platform-shipped intent profile (ADR-0016).
+#
+# This pack IS the engine's conservative defaults, transcribed from what used
+# to live as Python constants. Every customer pack `extends: builtin:baseline`
+# (or opts out with `extends: null` and authors every mandatory section).
+# Behavior with no pack configured is bit-identical to the pre-profile
+# builtins — pinned by planner/tests/test_profile.py golden tests.
+#
+# Two invariants of this file, both CI-pinned:
+#   - it ships ZERO change classes: auto-approval authority can never
+#     originate from the platform (ADR-0016);
+#   - platform entries mirror the engine's legacy constants (drivers where
+#     the executor registry has one, vendor rollback semantics per
+#     ADR-0011/0012) so builtin behavior matches the pre-profile engine.
+profile_version: 1
+meta:
+  tenant: _platform
+  name: baseline
+  version: "1.0.0"
+  conformance: full
+  owner: autonetops platform
+  description: >-
+    Conservative engine defaults: single-target canaries, small blast
+    thresholds, transactional-safety-first delivery, zero change classes.
+extends: null
+
+sot:
+  intent_model_version: "1.0"
+  default_base_branch: main
+  device_kind: DcimGenericDevice
+  role_path: role__value
+  platform_path: platform__node__name__value
+  # region_path deliberately unset: region is not modeled until a pack
+  # declares where it lives in the customer's schema.
+
+blast_radius:
+  thresholds:
+    low_max_devices: 2
+    high_min_devices: 10
+    high_min_regions: 2
+
+approvals:
+  floors:
+    low: []
+    moderate: []
+    high: []
+
+platforms:
+  # Interim vendor knowledge until drivers declare capabilities in the SoT
+  # (ADR-0011). Keys are spelled exactly as the SoT spells platforms.
+  junos: {driver: junos, rollback: commit_confirmed}
+  iosxr: {driver: iosxr, rollback: commit_confirm}
+  eos: {driver: eos, rollback: checkpoint}
+  arista_eos: {driver: eos, rollback: snapshot_revert}
+  srlinux: {driver: srlinux, rollback: snapshot_revert}
+  nokia_srlinux: {driver: srlinux, rollback: snapshot_revert}
+
+artifacts:
+  definitions:
+    device-configuration: {content_format: cli-text}
+
+rollback:
+  confirm_timeout_minutes: 10
+
+abort_criteria:
+  - validator gate fails on any canary stage
+  - any step rollback is triggered
+  - manual abort via ibnctl
+
+files:
+  canary_strategies: canary_strategies.yaml
+  delivery_preferences: delivery_preferences.yaml

@@ -1,0 +1,20 @@
+# builtin:baseline canary strategies — transcription of the former
+# DEFAULT_STRATEGIES constants (pinned equal by test_profile.py).
+---
+version: builtin
+strategies:
+  - name: builtin-single-target-canary
+    applies_to_blast_radius: [low, moderate]
+    stages:
+      - select: one_target
+        soak_minutes: 30
+      - select: remainder
+  - name: builtin-high-blast-radius
+    applies_to_blast_radius: [high]
+    requires_approvals: [platform-lead, domain-owner]
+    stages:
+      - select: one_target
+        soak_minutes: 60
+      - select: one_per_role
+        soak_minutes: 60
+      - select: remainder

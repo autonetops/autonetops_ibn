@@ -1,0 +1,444 @@
+{
+  "$defs": {
+    "ApprovalFloors": {
+      "additionalProperties": false,
+      "properties": {
+        "high": {
+          "items": {
+            "type": "string"
+          },
+          "title": "High",
+          "type": "array"
+        },
+        "low": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Low",
+          "type": "array"
+        },
+        "moderate": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Moderate",
+          "type": "array"
+        }
+      },
+      "title": "ApprovalFloors",
+      "type": "object"
+    },
+    "ApprovalsSection": {
+      "additionalProperties": false,
+      "properties": {
+        "floors": {
+          "$ref": "#/$defs/ApprovalFloors",
+          "default": {
+            "high": [],
+            "low": [],
+            "moderate": []
+          }
+        }
+      },
+      "title": "ApprovalsSection",
+      "type": "object"
+    },
+    "ArtifactBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "content_format": {
+          "$ref": "#/$defs/ContentFormat"
+        }
+      },
+      "required": [
+        "content_format"
+      ],
+      "title": "ArtifactBinding",
+      "type": "object"
+    },
+    "ArtifactsSection": {
+      "additionalProperties": false,
+      "properties": {
+        "definitions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ArtifactBinding"
+          },
+          "title": "Definitions",
+          "type": "object"
+        }
+      },
+      "title": "ArtifactsSection",
+      "type": "object"
+    },
+    "BlastRadiusSection": {
+      "additionalProperties": false,
+      "properties": {
+        "thresholds": {
+          "$ref": "#/$defs/BlastThresholdsModel",
+          "default": {
+            "high_min_devices": 10,
+            "high_min_regions": 2,
+            "low_max_devices": 2
+          }
+        }
+      },
+      "title": "BlastRadiusSection",
+      "type": "object"
+    },
+    "BlastThresholdsModel": {
+      "additionalProperties": false,
+      "properties": {
+        "high_min_devices": {
+          "default": 10,
+          "minimum": 1,
+          "title": "High Min Devices",
+          "type": "integer"
+        },
+        "high_min_regions": {
+          "default": 2,
+          "minimum": 1,
+          "title": "High Min Regions",
+          "type": "integer"
+        },
+        "low_max_devices": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Low Max Devices",
+          "type": "integer"
+        }
+      },
+      "title": "BlastThresholdsModel",
+      "type": "object"
+    },
+    "ContentFormat": {
+      "description": "What the artifact's bytes ARE - this, not taste, drives protocol\nselection (ADR-0012): model-based payloads prefer NETCONF/gNMI, CLI\ntext can only ride a CLI-shaped transport.",
+      "enum": [
+        "cli-text",
+        "openconfig-json",
+        "ietf-xml"
+      ],
+      "title": "ContentFormat",
+      "type": "string"
+    },
+    "FilesSection": {
+      "additionalProperties": false,
+      "description": "Which sibling files this pack provides. Listed => MUST exist and\nvalidate; a declared-but-broken file is a load error, never a builtin\nfallback (kills hardcoded-assumption #9).",
+      "properties": {
+        "canary_strategies": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canary Strategies"
+        },
+        "change_classes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Change Classes"
+        },
+        "delivery_preferences": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delivery Preferences"
+        },
+        "rate_limits": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rate Limits"
+        }
+      },
+      "title": "FilesSection",
+      "type": "object"
+    },
+    "PlatformBinding": {
+      "additionalProperties": false,
+      "description": "Executor driver + rollback strategy for one platform, keyed exactly\nas the customer's SoT spells it. Partial entries are legal only in\nbuiltin/legacy modes (the engine's kind-based fallbacks apply); strict\npacks must bind both fields \u2014 a guessed driver or a silent 'manual'\nrollback is never reviewed data (F10).",
+      "properties": {
+        "driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Driver"
+        },
+        "rollback": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rollback"
+        }
+      },
+      "title": "PlatformBinding",
+      "type": "object"
+    },
+    "ProfileMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "conformance": {
+          "default": "tuned",
+          "enum": [
+            "baseline",
+            "tuned",
+            "full"
+          ],
+          "title": "Conformance",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "owner": {
+          "default": "",
+          "title": "Owner",
+          "type": "string"
+        },
+        "tenant": {
+          "title": "Tenant",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant",
+        "name",
+        "version"
+      ],
+      "title": "ProfileMeta",
+      "type": "object"
+    },
+    "RollbackDefaults": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm_timeout_minutes": {
+          "default": 10,
+          "minimum": 1,
+          "title": "Confirm Timeout Minutes",
+          "type": "integer"
+        }
+      },
+      "title": "RollbackDefaults",
+      "type": "object"
+    },
+    "SotBinding": {
+      "additionalProperties": false,
+      "description": "How the engine queries the customer's Infrahub schema (ADR-0016).\n\nExactly two path shapes are supported, validated at load:\n``attr__value`` (attribute) and ``rel__node__attr__value`` (relationship\ntraversal). Full query templating stays deferred to the ADR-0011 seam.",
+      "properties": {
+        "default_base_branch": {
+          "default": "main",
+          "title": "Default Base Branch",
+          "type": "string"
+        },
+        "device_kind": {
+          "default": "DcimGenericDevice",
+          "title": "Device Kind",
+          "type": "string"
+        },
+        "intent_model_version": {
+          "default": "1.0",
+          "title": "Intent Model Version",
+          "type": "string"
+        },
+        "platform_path": {
+          "default": "platform__node__name__value",
+          "title": "Platform Path",
+          "type": "string"
+        },
+        "region_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region Path"
+        },
+        "role_path": {
+          "default": "role__value",
+          "title": "Role Path",
+          "type": "string"
+        }
+      },
+      "title": "SotBinding",
+      "type": "object"
+    }
+  },
+  "$id": "https://autonetops.dev/contracts/profile/v1/profile.schema.json",
+  "additionalProperties": false,
+  "description": "One profile.yaml, pre-resolution (a single layer).",
+  "properties": {
+    "abort_criteria": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Abort Criteria"
+    },
+    "approvals": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApprovalsSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "artifacts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArtifactsSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "blast_radius": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BlastRadiusSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "extends": {
+      "anyOf": [
+        {
+          "const": "builtin:baseline",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "builtin:baseline",
+      "title": "Extends"
+    },
+    "files": {
+      "$ref": "#/$defs/FilesSection",
+      "default": {
+        "canary_strategies": null,
+        "change_classes": null,
+        "delivery_preferences": null,
+        "rate_limits": null
+      }
+    },
+    "meta": {
+      "$ref": "#/$defs/ProfileMeta"
+    },
+    "platforms": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PlatformBinding"
+      },
+      "title": "Platforms",
+      "type": "object"
+    },
+    "profile_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Profile Version",
+      "type": "integer"
+    },
+    "requires_planner": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requires Planner"
+    },
+    "rollback": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RollbackDefaults"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "sot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SotBinding"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "meta"
+  ],
+  "title": "IntentProfileDoc",
+  "type": "object"
+}

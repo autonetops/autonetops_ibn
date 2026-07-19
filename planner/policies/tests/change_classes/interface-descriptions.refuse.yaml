@@ -1,0 +1,13 @@
+# Golden REFUSE fixture (ADR-0016 gate 5): this diff must NOT classify into
+# interface-descriptions — an MTU change rides along with the description,
+# so the whole changeset takes the normal approval path (fail-closed).
+artifact_definition: device-configuration
+content_format: cli-text
+before: |
+  interface xe-0/0/1
+   description CUST-A pe1 uplink
+   mtu 9192
+after: |
+  interface xe-0/0/1
+   description CUST-A pe1 uplink
+   mtu 1500

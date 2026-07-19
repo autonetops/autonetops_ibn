@@ -1,0 +1,16 @@
+# builtin:baseline delivery preferences — transcription of the former
+# DEFAULT_DELIVERY_PREFERENCES constants (pinned equal by test_profile.py).
+# Order = transactional safety first (ADR-0012). The planner intersects this
+# order with what the artifact's content_format can ride.
+---
+version: builtin
+platforms:
+  junos: [netconf, gnmi, cli]
+  iosxr: [netconf, gnmi, cli]
+  eos: [netconf, eapi, gnmi, cli]
+  arista_eos: [netconf, eapi, gnmi, cli]
+  srlinux: [gnmi, netconf, cli, json_rpc]
+  nokia_srlinux: [gnmi, netconf, cli, json_rpc]
+  cisco_iosxe: [netconf, cli]
+  frr: [cli]
+  cloudvision: [http_api]

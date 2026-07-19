@@ -120,6 +120,18 @@ class StepTarget(BaseModel):
     affected_devices: list[str] = Field(default_factory=list)
 
 
+# The closed rollback vocabulary (ADR-0011): packs select among these,
+# never define new ones - membership is checked at pack load (ADR-0016).
+ROLLBACK_STRATEGIES = {
+    "commit_confirmed",
+    "commit_confirm",
+    "checkpoint",
+    "snapshot_revert",
+    "controller_revision",
+    "manual",
+}
+
+
 class RollbackSpec(BaseModel):
     """Strategy names are driver-declared (ADR-0011). Well-known values:
     commit_confirmed, commit_confirm, checkpoint, snapshot_revert,
@@ -182,11 +194,38 @@ class PreApproval(BaseModel):
     policy_version: str
 
 
+class ProfileRef(BaseModel):
+    """Which intent profile (policy pack, ADR-0016) produced a Plan.
+
+    Provenance, never authority: dispatch re-derives every authorization
+    under the CURRENT pack (tighten-only); this records what was in force
+    at plan time. The checksum is computed by the loader over the fully
+    resolved profile - identity from bytes, not claims."""
+
+    tenant: str
+    name: str
+    version: str
+    checksum: str  # "sha256:<hex>" over the resolved canonical JSON
+    source: Literal["builtin", "pack", "legacy-policies-dir"]
+
+
 class PolicyEvaluation(BaseModel):
     canary_strategy: str
     change_window: str = "not_evaluated"
     rate_limits: str = "not_evaluated"
     pre_approved: PreApproval | None = None
+    profile: ProfileRef | None = None  # None = pre-profile plan (ADR-0016)
+    approvals_required: list[str] = Field(
+        default_factory=list,
+        description="Effective plan-time approval bar: strategy approvals "
+        "unioned with the profile's blast-class floor. Dispatch treats this "
+        "as a floor and may only tighten it.",
+    )
+    assumptions: list[str] = Field(
+        default_factory=list,
+        description="Non-safety fallbacks the planner took (legacy/builtin "
+        "modes only); empty in strict profile mode.",
+    )
 
 
 class PlanSource(BaseModel):

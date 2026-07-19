@@ -1,0 +1,18 @@
+# Golden MATCH fixture (ADR-0016 gate 5): this diff MUST classify into
+# interface-descriptions. Executable proof reviewed with the class itself.
+artifact_definition: device-configuration
+content_format: cli-text
+before: |
+  interface xe-0/0/1
+   description CUST-A pe1 uplink
+   mtu 9192
+  interface xe-0/0/2
+   description spare
+   mtu 9192
+after: |
+  interface xe-0/0/1
+   description CUST-A pe1 uplink (ticket NET-1234)
+   mtu 9192
+  interface xe-0/0/2
+   description CUST-C site-3 access
+   mtu 9192
