@@ -179,6 +179,51 @@ inside contracts across domains ("site A reaches site B" in connectivity,
 "management plane reachable" in operations/resilience). Promoting it to a
 domain would scatter one intent's terms across two intents.
 
+The lab's workshop ontology calls this concept a **realm** and models it as
+a node kind; ADR-0017 records the alignment: same concept, attribute form
+(the taxonomy must grow without schema migrations), with `reliability →
+resilience`, `performance → capacity`, and `reachability` folding into
+objectives as above. Domain values are customer data — each tenant's
+Infrahub carries its own taxonomy; this table is the recommended starter.
+
+## The supporting vocabulary: tenant, zone, capability
+
+Three kinds a customer's intent layer should model so that critical
+questions are answered by a typed relationship instead of a naming
+convention (adopted from the lab's workshop ontology, ADR-0017):
+
+- **Tenant** — WHO an intent serves: a customer, a partner, the provider
+  itself. A contract's `consumer` is the prose form; the tenant kind is
+  the structured one, and tenant-relative invariants (no-leak, prefix
+  authorization) are meaningless without it.
+- **Zone** — WHERE, as a named region instruments can reference: `core`,
+  `transit`, `internet_peering`, `management`, … A contract says "never
+  toward internet-peers" without enumerating devices.
+- **Capability** — WITH WHAT each platform can participate: `gnmi`,
+  `ssh_cli`, `mpls`, … The switchboard between intent and mechanism:
+  collectors are selected off it, renderer arms gate on it,
+  `capability_present` invariants check it — and when capability records
+  land in the SoT (ADR-0011), the planner's protocol selection and driver
+  resolution read it instead of the interim profile bindings (ADR-0016).
+
+All three are **controlled vocabularies**, never free text: every machine
+decision downstream branches on these values, so free text here is
+undefined behavior there.
+
+## Three axes that look alike (and must not be conflated)
+
+| Axis | Lives on | Vocabulary | Answers |
+|---|---|---|---|
+| **priority** | the Intent (only; flows down) | low / medium / high / critical | how important is this outcome to the business? Inherited by plans; gates emergency eligibility. |
+| **severity** | the Invariant (and observability signals) | warning / major / critical | what is a violation of this specific condition worth when it happens? Merge-time projections derive their blocking behavior from it. |
+| **blast radius** | the Plan (computed); the change window (as a ceiling) | low / moderate / high | how big is this specific change? Selects the canary strategy and the admitting windows. |
+
+A `critical`-priority intent can receive a `low`-blast-radius change
+guarded by a `critical`-severity invariant. Three different questions,
+three different objects — and per-customer thresholds for the third axis
+are profile data (ADR-0016), while the first two never leave the intent
+layer.
+
 ## The derived vocabulary (compiled, never authored)
 
 Everything below is **generated from intent** — reviewed as output, never
@@ -194,6 +239,18 @@ written by hand:
   runtime evaluates** — one vocabulary between compiler and validator.
   Rule of the repo: every config artifact has a sibling expectation
   artifact.
+
+  Four disciplines make expectations prove instead of spam (adopted from
+  the lab's workshop ontology, ADR-0017):
+  1. **Ranges, never exact values** — `route_count <= 200`, not `== 173`;
+     exact values turn normal churn into false alarms.
+  2. **Forbidden behavior is stated explicitly** — you cannot prove a
+     negative you never wrote down.
+  3. **The collector is derived from platform capability, never chosen by
+     hand** — re-platform a box and `observedVia` flips with no intent
+     edit (ADR-0011/0012).
+  4. **Freshness is part of the proof** — stale evidence is no evidence;
+     a dead collector reads as *unknown*, never as *fine*.
 - **Plan** — the declarative rollout document (ADR-0003); **stages**,
   **steps**, **gates** inside it; **blast radius** as its risk annotation;
   **change class** as its provable diff shape (ADR-0014). A plan is not
