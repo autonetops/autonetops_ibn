@@ -9,7 +9,8 @@ for drift.
 
 | Contract | Version | Source of truth | Export command |
 |---|---|---|---|
-| Plan | v1 | `planner/src/autonetops_planner/models.py` | `autonetops-planner export-schema` |
+| Plan | v1 | `planner/src/autonetops_planner/models.py` | `autonetops-planner export-schema --contract plan` |
+| Intent profile | v1 | `planner/src/autonetops_planner/profile.py` (`IntentProfileDoc`) | `autonetops-planner export-schema --contract profile` |
 
 Upcoming: expectation artifact (infrahub transform), execution report
 (executor), compliance report (validator).

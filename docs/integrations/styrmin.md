@@ -98,8 +98,18 @@ Deployment-time knobs:
   the orchestrator starts).
 - **Env vars** (deployment-level, reach the container via `extraEnv`):
   `INFRAHUB_API_TOKEN` (required for the watch loop to talk to Infrahub),
-  `IBN_POLICIES_DIR` (optional override of the planner policy set baked into
-  the image at `/app/planner/policies`).
+  `IBN_POLICIES_DIR` (the deployment's intent profile pack, ADR-0016 — a
+  directory containing `profile.yaml`; defaults to the reference pack baked
+  into the image at `/app/planner/policies`), `IBN_TENANT` (optional tenant
+  guard: refuse packs and plan bundles recorded for another tenant).
+
+  The per-customer pattern: keep the pack as a `policy-pack/` directory
+  inside the customer's SoT repo — the `sot_repo_url` init container
+  already clones it — and set
+  `IBN_POLICIES_DIR=/data/sot-repo/policy-pack` plus
+  `IBN_TENANT=<their pack's meta.tenant>`. One reviewed source for plan
+  and dispatch, no second clone. See
+  `docs/architecture/intent-profiles.md`.
 - **Container overrides**: the orchestrator container's `command`/`args` can be
   overridden per deployment, e.g. to change the poll interval
   (`args: ["watch", "--interval", "60"]`).

@@ -25,16 +25,12 @@ import yaml
 
 from autonetops_executor.inventory import SotInventory
 from autonetops_planner.blast_radius import compute_blast_radius
-from autonetops_planner.change_classes import classify_changes, load_change_classes
+from autonetops_planner.change_classes import classify_changes
 from autonetops_planner.diffing import diff_artifacts
 from autonetops_planner.models import Plan, PreApproval
-from autonetops_planner.plan_builder import build_plan
-from autonetops_planner.policies import (
-    load_canary_strategies,
-    load_delivery_preferences,
-    select_strategy,
-    strategy_by_name,
-)
+from autonetops_planner.plan_builder import PlanBuildError, build_plan
+from autonetops_planner.policies import select_strategy, strategy_by_name
+from autonetops_planner.profile import ProfileError, ResolvedProfile, load_profile
 from autonetops_validator import ExpectationSet
 
 from .dispatch import DispatchOptions, dispatch_plan, write_report
@@ -52,10 +48,24 @@ DEFAULT_REPO = Path(os.environ.get("IBN_SOT_REPO", "/root/autonetops_infrahub"))
 DEFAULT_PLANS_DIR = Path(os.environ.get("IBN_PLANS_DIR", "plans"))
 # One policy source for plan AND dispatch: classification at plan time and
 # re-verification at dispatch time must read the same reviewed data, or every
-# pre-approval claim fails its re-check (ADR-0014).
+# pre-approval claim fails its re-check (ADR-0014). A dir with profile.yaml
+# is an intent profile pack (ADR-0016); without one, legacy mode applies.
 DEFAULT_POLICIES_DIR: Optional[Path] = (
     Path(os.environ["IBN_POLICIES_DIR"]) if os.environ.get("IBN_POLICIES_DIR") else None
 )
+# Tenant guard (ADR-0016): when set, packs and plan bundles of another tenant
+# are refused loudly - cross-tenant reuse must never be quiet.
+DEFAULT_TENANT: Optional[str] = os.environ.get("IBN_TENANT") or None
+
+
+def _load_profile_or_exit(policies_dir: Optional[Path]) -> ResolvedProfile:
+    """F14: an unloadable/invalid/tenant-mismatched pack stops the phase -
+    never a silent fallback to builtin behavior."""
+    try:
+        return load_profile(policies_dir, tenant=DEFAULT_TENANT)
+    except ProfileError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(4) from exc
 
 
 def _client(url: str, token: str):
@@ -108,6 +118,7 @@ def _build(
     """The plan phase; returns (plan_dir, plan, decision) or Nones when
     there is nothing to deploy."""
     now = _now(at)
+    profile = _load_profile_or_exit(policies_dir)
     client = _client(infrahub_url, infrahub_token)
     source = RenderedArtifactSource(client, repo)
 
@@ -119,14 +130,14 @@ def _build(
         typer.echo("no artifact differences; nothing to plan")
         return None, None, None
 
-    strategies = load_canary_strategies(policies_dir)
-    blast = compute_blast_radius(changes)
+    strategies = profile.strategies
+    blast = compute_blast_radius(changes, profile.thresholds)
 
     # -- pre-approved change classes (ADR-0014): prove the diff is routine.
     #    Fail-closed: unfetchable bytes, emergency, or a spent rate limit all
     #    fall back to the normal approval path. Fetched pairs are cached so
     #    the base bytes can be frozen into the bundle below without a re-fetch.
-    class_policy = load_change_classes(policies_dir)
+    class_policy = profile.change_classes
     content_cache: dict[tuple[str, str], tuple[str, str]] = {}
     pre = None
     if class_policy.classes and not emergency:
@@ -161,12 +172,19 @@ def _build(
         strategy = strategy_by_name(strategies, pre.change_class.canary_strategy)
     else:
         strategy = select_strategy(strategies, blast.classification)
-    plan = build_plan(
-        changes, strategy, load_delivery_preferences(policies_dir),
-        pre_approved=(PreApproval(class_name=pre.change_class.name,
-                                  policy_version=pre.policy_version)
-                      if pre else None))
+    try:
+        plan = build_plan(
+            changes, strategy,
+            pre_approved=(PreApproval(class_name=pre.change_class.name,
+                                      policy_version=pre.policy_version)
+                          if pre else None),
+            profile=profile)
+    except PlanBuildError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
     plan.created_at = now.isoformat(timespec="seconds")
+    for assumption in plan.policy_evaluation.assumptions:
+        typer.echo(f"  assumption: {assumption}")
 
     windows = load_windows(client)
     timeline = evaluate_timeline(plan, windows, now=now)
@@ -184,6 +202,13 @@ def _build(
     _dump(plan_dir / "plan.yaml", plan)
     _dump(plan_dir / "timeline.yaml", timeline)
     _dump(plan_dir / "decision.yaml", decision)
+    # profile.lock.yaml: the resolved profile frozen into the bundle -
+    # symmetric with content_base/, for audit and re-derivation, never
+    # authority (dispatch judges under the CURRENT profile, ADR-0016).
+    (plan_dir / "profile.lock.yaml").write_text(yaml.safe_dump(
+        {"ref": profile.ref.model_dump(mode="json"),
+         "resolved": profile.resolved_doc},
+        sort_keys=False))
 
     # one file per (target, definition): a target carrying two artifact
     # definitions (device-config + telemetry-subs) must not overwrite itself
@@ -259,14 +284,35 @@ def _dispatch(
     plan = Plan.model_validate(yaml.safe_load((plan_dir / "plan.yaml").read_text()))
     decision = Decision.model_validate(
         yaml.safe_load((plan_dir / "decision.yaml").read_text()))
+    profile = _load_profile_or_exit(policies_dir)
+
+    # -- fail-closed profile holds (ADR-0016, F14): a bundle planned under a
+    #    real pack must dispatch under a real pack, and never under another
+    #    tenant's. Nothing ran, nothing broke - exit 4 (approval-hold).
+    recorded_profile = plan.policy_evaluation.profile
+    if recorded_profile is not None:
+        if DEFAULT_TENANT and recorded_profile.tenant not in (
+                DEFAULT_TENANT, "_platform", "_legacy"):
+            typer.echo(
+                f"HOLD: bundle was planned for tenant "
+                f"{recorded_profile.tenant!r}, this deployment is "
+                f"{DEFAULT_TENANT!r} (IBN_TENANT) - refusing cross-tenant "
+                f"dispatch", err=True)
+            return 4
+        if recorded_profile.source == "pack" and profile.ref.source != "pack":
+            typer.echo(
+                f"HOLD: bundle was planned under pack "
+                f"{recorded_profile.name!r}@{recorded_profile.version} but no "
+                f"pack is loaded now (set --policies-dir or IBN_POLICIES_DIR) "
+                f"- refusing to dispatch under weaker policy", err=True)
+            return 4
 
     # -- the approval bar can only tighten at dispatch time (ADR-0014 §5):
     #    decision.yaml is not integrity-protected, so a pre-approval claim is
     #    re-derived from the frozen bundle bytes and anything else is raised
-    #    to the strategy floor before a single verb runs.
+    #    to the current floor before a single verb runs.
     required, notes, claim_verified = tighten_approvals(
-        plan, decision, plan_dir,
-        load_change_classes(policies_dir), load_canary_strategies(policies_dir))
+        plan, decision, plan_dir, profile)
     for note in notes:
         typer.echo(f"approval bar: {note}")
     decision.approvals_required = required
@@ -277,7 +323,14 @@ def _dispatch(
 
     client = _client(infrahub_url, infrahub_token)
     windows = load_windows(client)
-    inventory = SotInventory(infrahub_url, infrahub_token, username, password)
+    inventory = SotInventory(
+        infrahub_url, infrahub_token, username, password,
+        platform_drivers={
+            platform: binding.driver
+            for platform, binding in profile.platforms.items()
+            if binding.driver
+        },
+    )
 
     expectation_docs = [p.read_text()
                         for p in sorted((plan_dir / "expectations").glob("*.yml"))]
@@ -290,6 +343,26 @@ def _dispatch(
                    if hasattr(record, "model_dump") else record)
         with evidence_path.open("a") as fh:
             fh.write(json.dumps(payload) + "\n")
+
+    # -- profile drift is recorded, never blocking by itself (ADR-0016):
+    #    the tighten-only rules above already re-proved everything that
+    #    matters under the current pack; blocking on a checksum change
+    #    would freeze operations on every pack bump.
+    if (recorded_profile is not None
+            and recorded_profile.checksum != profile.ref.checksum):
+        drift = {
+            "recorded": f"{recorded_profile.tenant}/{recorded_profile.name}"
+                        f"@{recorded_profile.version} {recorded_profile.checksum}",
+            "current": f"{profile.ref.tenant}/{profile.ref.name}"
+                       f"@{profile.ref.version} {profile.ref.checksum}",
+        }
+        emit({"operation": "profile_drift", "target": plan.id,
+              "success": True, "detail": drift})
+        decision.reasons.append(
+            f"profile drift: planned under {drift['recorded']}, "
+            f"dispatched under {drift['current']}")
+        typer.echo(f"profile drift: planned under {drift['recorded']}, "
+                   f"dispatching under {drift['current']} (re-proved above)")
 
     def content_for(step) -> str:
         target = step.target.control_point

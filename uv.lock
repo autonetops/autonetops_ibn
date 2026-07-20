@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -291,6 +291,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "jinja2" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -304,6 +305,7 @@ requires-dist = [
     { name = "autonetops-planner", editable = "planner" },
     { name = "autonetops-validator", editable = "validator" },
     { name = "infrahub-sdk", specifier = ">=1.0" },
+    { name = "jinja2", marker = "extra == 'dev'", specifier = ">=3.1" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.0" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -318,6 +320,7 @@ name = "autonetops-planner"
 version = "0.1.0"
 source = { editable = "planner" }
 dependencies = [
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "typer" },
@@ -335,6 +338,7 @@ infrahub = [
 [package.metadata]
 requires-dist = [
     { name = "infrahub-sdk", marker = "extra == 'infrahub'", specifier = ">=1.0" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pyyaml", specifier = ">=6.0" },

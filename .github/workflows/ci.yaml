@@ -35,6 +35,23 @@ jobs:
       - name: Lint
         run: ruff check planner executor orchestrator validator tools
 
+  # Gate 2 of the target set: intent profile packs validate (ADR-0016).
+  # Runs the same command a customer pack's CI runs - schema, closed
+  # vocabulary, cross-references, golden change-class fixtures.
+  policy-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install planner
+        run: pip install -e ./planner
+      - name: Validate the reference pack (planner/policies)
+        run: autonetops-planner validate-pack planner/policies
+      - name: Validate builtin:baseline (self-check via empty pack ref)
+        run: python3 -c "from autonetops_planner.profile import load_profile; p = load_profile(None); print('builtin ok:', p.ref.checksum)"
+
   scaffold:
     runs-on: ubuntu-latest
     steps:

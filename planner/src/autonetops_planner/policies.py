@@ -3,6 +3,12 @@
 Policies are data under review, never hardcoded. While the policy files are
 still drafts (empty lists), built-in conservative defaults apply and are
 reported as such in the Plan's policy_evaluation.
+
+The lenient loaders in this module implement LEGACY MODE (a policies dir
+without profile.yaml) and the builtin defaults. Packs with a profile.yaml
+go through autonetops_planner.profile.load_profile instead, which is strict
+(ADR-0016). The DEFAULT_* constants below are mirrored by the shipped
+packs/baseline/ pack — pinned equal by planner/tests/test_profile.py.
 """
 
 from __future__ import annotations
@@ -160,10 +166,14 @@ def select_protocol(
     """First platform-preferred protocol that can carry the artifact's
     format; None = unknown platform, the driver's own declared order
     applies (ADR-0012). NETCONF/gNMI are only eligible for model-based
-    payloads - CLI text cannot ride them."""
+    payloads - CLI text cannot ride them.
+
+    Keys are matched exactly as the SoT spells the platform first (pack
+    keys, ADR-0016), then lowercased (the builtin/legacy key style)."""
     if not platform:
         return None
-    order = preferences["platforms"].get(platform.lower())
+    platforms = preferences.get("platforms") or {}
+    order = platforms.get(platform) or platforms.get(platform.lower())
     if not order:
         return None
     format_key = "model-based" if content_format in MODEL_BASED_FORMATS else "cli-text"

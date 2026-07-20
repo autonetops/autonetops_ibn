@@ -21,11 +21,13 @@ from autonetops_planner.models import (
     StepTarget,
 )
 from autonetops_planner.policies import DEFAULT_STRATEGIES, CanaryStage, CanaryStrategy
+from autonetops_planner.profile import ApprovalFloors, ResolvedProfile, load_profile
 from autonetops_validator import ExpectationSet
 
 from autonetops_orchestrator.dispatch import DispatchOptions, dispatch_plan
 from autonetops_orchestrator.preapproval import (
     UNVERIFIABLE,
+    effective_blast,
     recent_pre_approved,
     tighten_approvals,
     verify_pre_approval,
@@ -59,6 +61,21 @@ DESCRIPTIONS = ChangeClass(
 )
 POLICY = ChangeClassPolicy(version="1", classes=[DESCRIPTIONS])
 CLAIM = PreApproval(class_name="interface-descriptions", policy_version="1")
+
+
+def _profile(policy: ChangeClassPolicy = POLICY, *, strategies=None,
+             floors: ApprovalFloors | None = None,
+             thresholds=None) -> ResolvedProfile:
+    """The dispatch-time profile: builtin baseline with the test's change
+    classes (and optionally floors/thresholds) swapped in."""
+    base = load_profile(None)
+    return base.model_copy(update={
+        "change_classes": policy,
+        "strategies": list(strategies) if strategies is not None
+        else list(DEFAULT_STRATEGIES),
+        "floors": floors or ApprovalFloors(),
+        "thresholds": thresholds or base.thresholds,
+    })
 
 
 def _sha(text: str) -> str:
@@ -133,7 +150,7 @@ def test_decide_emergency_never_combines_with_pre_approval():
 
 def test_verify_pre_approval_roundtrip(tmp_path):
     _bundle(tmp_path)
-    assert verify_pre_approval(tmp_path, _plan(), POLICY)
+    assert verify_pre_approval(tmp_path, _plan(), _profile())
 
 
 def test_verify_refuses_tampered_content_base(tmp_path):
@@ -141,13 +158,13 @@ def test_verify_refuses_tampered_content_base(tmp_path):
     # same description-only shape, but not the bytes the plan hashed
     (tmp_path / "content_base" / "pe-1__device-configuration.cfg").write_text(
         BEFORE.replace("old uplink", "innocent-looking"))
-    assert not verify_pre_approval(tmp_path, _plan(), POLICY)
+    assert not verify_pre_approval(tmp_path, _plan(), _profile())
 
 
 def test_verify_refuses_when_bytes_do_not_prove_the_class(tmp_path):
     _bundle(tmp_path, after=AFTER_MIXED)  # checksums consistent, diff not routine
     assert not verify_pre_approval(
-        tmp_path, _plan(after=AFTER_MIXED), POLICY)
+        tmp_path, _plan(after=AFTER_MIXED), _profile())
 
 
 def test_kill_switch_disables_already_planned_bundles(tmp_path):
@@ -156,7 +173,7 @@ def test_kill_switch_disables_already_planned_bundles(tmp_path):
         ChangeClass(name="interface-descriptions", enabled=False,
                     cli_text_allow=DESCRIPTIONS.cli_text_allow,
                     max_blast_radius=BlastRadiusClass.HIGH)])
-    assert not verify_pre_approval(tmp_path, _plan(), disabled)
+    assert not verify_pre_approval(tmp_path, _plan(), _profile(disabled))
 
 
 # -- the approval bar only tightens at dispatch -------------------------------
@@ -166,7 +183,7 @@ def test_tighten_keeps_verified_pre_approval(tmp_path):
     decision = Decision(mode="immediate", approvals_required=[],
                         pre_approved_class="interface-descriptions")
     required, notes, verified = tighten_approvals(
-        _plan(), decision, tmp_path, POLICY, DEFAULT_STRATEGIES)
+        _plan(), decision, tmp_path, _profile())
     assert required == []
     assert verified is True
     assert any("re-verified" in note for note in notes)
@@ -177,7 +194,7 @@ def test_tighten_restores_strategy_floor_on_failed_claim(tmp_path):
     plan = _plan(strategy="builtin-high-blast-radius", after=AFTER_MIXED)
     decision = Decision(mode="immediate", approvals_required=[])
     required, notes, verified = tighten_approvals(
-        plan, decision, tmp_path, POLICY, DEFAULT_STRATEGIES)
+        plan, decision, tmp_path, _profile())
     assert required == ["domain-owner", "platform-lead"]
     assert verified is False
     assert any("did NOT re-verify" in note for note in notes)
@@ -187,7 +204,7 @@ def test_tighten_refuses_unknown_strategy_on_failed_claim(tmp_path):
     _bundle(tmp_path, after=AFTER_MIXED)
     plan = _plan(strategy="custom-not-loaded", after=AFTER_MIXED)
     required, _, verified = tighten_approvals(
-        plan, Decision(mode="immediate"), tmp_path, POLICY, DEFAULT_STRATEGIES)
+        plan, Decision(mode="immediate"), tmp_path, _profile())
     assert UNVERIFIABLE in required
     assert verified is False
 
@@ -196,10 +213,81 @@ def test_tighten_restores_floor_on_edited_decision_without_claim(tmp_path):
     plan = _plan(pre=None, strategy="builtin-high-blast-radius")
     tampered = Decision(mode="immediate", approvals_required=[])
     required, notes, verified = tighten_approvals(
-        plan, tampered, tmp_path, ChangeClassPolicy(), DEFAULT_STRATEGIES)
+        plan, tampered, tmp_path, _profile(ChangeClassPolicy()))
     assert required == ["domain-owner", "platform-lead"]
     assert verified is None
-    assert any("tightened to the floor" in note for note in notes)
+    assert any("tightened" in note for note in notes)
+
+
+# -- ADR-0016: floors + blast re-tightening under the current profile ---------
+
+def test_effective_blast_tightens_but_never_loosens():
+    from autonetops_planner.blast_radius import Thresholds
+
+    plan = _plan()  # recorded LOW, 1 device
+    # customer tightened thresholds after planning: 1 device is now HIGH
+    tight = _profile(thresholds=Thresholds(low_max_devices=0, high_min_devices=1))
+    assert effective_blast(plan, tight) == BlastRadiusClass.HIGH
+
+    # loose thresholds never downgrade the pinned class
+    high_plan = _plan()
+    high_plan.blast_radius.classification = BlastRadiusClass.HIGH
+    loose = _profile(thresholds=Thresholds(low_max_devices=500, high_min_devices=1000))
+    assert effective_blast(high_plan, loose) == BlastRadiusClass.HIGH
+
+
+def test_tighten_applies_current_blast_class_floor(tmp_path):
+    from autonetops_planner.blast_radius import Thresholds
+
+    plan = _plan(pre=None)
+    decision = Decision(mode="immediate", approvals_required=[])
+    profile = _profile(
+        floors=ApprovalFloors(high=["change-board"]),
+        thresholds=Thresholds(low_max_devices=0, high_min_devices=1),
+    )
+    required, notes, verified = tighten_approvals(plan, decision, tmp_path, profile)
+    assert "change-board" in required
+    assert verified is None
+    assert any("re-tightened" in note for note in notes)
+
+
+def test_tighten_unions_plan_recorded_bar(tmp_path):
+    plan = _plan(pre=None)
+    plan.policy_evaluation.approvals_required = ["acme-netops"]
+    decision = Decision(mode="immediate", approvals_required=[])
+    required, _, _ = tighten_approvals(plan, decision, tmp_path, _profile())
+    assert "acme-netops" in required
+
+
+def test_verified_claim_keeps_waived_bar_despite_floors(tmp_path):
+    """Pre-approval removes exactly one thing - the human plan-review step
+    (F3). A verified class claim stands in for the floor approvers."""
+    _bundle(tmp_path)
+    decision = Decision(mode="immediate", approvals_required=[],
+                        pre_approved_class="interface-descriptions")
+    profile = _profile(floors=ApprovalFloors(low=["acme-netops"]))
+    required, _, verified = tighten_approvals(_plan(), decision, tmp_path, profile)
+    assert verified is True
+    assert required == []
+
+
+def test_failed_claim_picks_up_current_floor(tmp_path):
+    _bundle(tmp_path, after=AFTER_MIXED)
+    plan = _plan(after=AFTER_MIXED)
+    decision = Decision(mode="immediate", approvals_required=[])
+    profile = _profile(floors=ApprovalFloors(low=["acme-netops"]))
+    required, _, verified = tighten_approvals(plan, decision, tmp_path, profile)
+    assert verified is False
+    assert "acme-netops" in required
+
+
+def test_decide_honors_plan_recorded_bar():
+    plan = _plan(pre=None)
+    plan.policy_evaluation.approvals_required = ["acme-change-board"]
+    timeline = evaluate_timeline(plan, [OPEN_WINDOW], now=NOW)
+    decision = decide(plan, timeline, now=NOW, strategies=DEFAULT_STRATEGIES)
+    assert decision.mode == "needs_approval"
+    assert "acme-change-board" in decision.approvals_required
 
 
 # -- rate limit ---------------------------------------------------------------

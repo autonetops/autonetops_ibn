@@ -15,7 +15,11 @@ dependencies = [
 
 [project.optional-dependencies]
 prefect = ["prefect>=3.0"]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+# jinja2: not imported by this package - infrahub-sdk registers a pytest
+# plugin that imports it at collection time, so any pip-based test install
+# (CI's `pip install -e './orchestrator[dev]'`) needs it present. The uv
+# workspace root carries the same pin in its dev group for the same reason.
+dev = ["pytest>=8.0", "ruff>=0.5", "jinja2>=3.1"]
 
 [project.scripts]
 ibn-orchestrate = "autonetops_orchestrator.cli:main"

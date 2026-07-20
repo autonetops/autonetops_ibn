@@ -35,9 +35,20 @@ query Device($name: String!) {
 
 
 class SotInventory:
-    """Resolve connection details and artifact content from Infrahub."""
+    """Resolve connection details and artifact content from Infrahub.
 
-    def __init__(self, address: str, token: str, username: str, password: str):
+    ``platform_drivers`` injects the intent profile's reviewed platform ->
+    driver bindings (ADR-0016), keyed exactly as the SoT spells platforms;
+    the module-level slug map stays the fail-closed fallback."""
+
+    def __init__(
+        self,
+        address: str,
+        token: str,
+        username: str,
+        password: str,
+        platform_drivers: dict[str, str] | None = None,
+    ):
         try:
             from infrahub_sdk import Config, InfrahubClientSync
         except ImportError as exc:  # pragma: no cover
@@ -48,6 +59,7 @@ class SotInventory:
         self._client = InfrahubClientSync(address=address, config=Config(api_token=token))
         self._username = username
         self._password = password
+        self._platform_drivers = platform_drivers or {}
 
     def connection_for(self, control_point: str) -> dict[str, Any]:
         result = self._client.execute_graphql(
@@ -78,6 +90,10 @@ class SotInventory:
             if not edges:
                 return None
             platform = (edges[0]["node"].get("platform") or {}).get("node") or {}
+            for key in ("name", "netmiko_device_type"):
+                spelled = (platform.get(key) or {}).get("value") or ""
+                if spelled in self._platform_drivers:  # profile binding, exact
+                    return self._platform_drivers[spelled]
             for key in ("netmiko_device_type", "name"):
                 slug = ((platform.get(key) or {}).get("value") or "").lower()
                 if slug in PLATFORM_DRIVERS:

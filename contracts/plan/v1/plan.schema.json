@@ -127,6 +127,22 @@
     },
     "PolicyEvaluation": {
       "properties": {
+        "approvals_required": {
+          "description": "Effective plan-time approval bar: strategy approvals unioned with the profile's blast-class floor. Dispatch treats this as a floor and may only tighten it.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Approvals Required",
+          "type": "array"
+        },
+        "assumptions": {
+          "description": "Non-safety fallbacks the planner took (legacy/builtin modes only); empty in strict profile mode.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
         "canary_strategy": {
           "title": "Canary Strategy",
           "type": "string"
@@ -140,6 +156,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/PreApproval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProfileRef"
             },
             {
               "type": "null"
@@ -176,6 +203,45 @@
         "policy_version"
       ],
       "title": "PreApproval",
+      "type": "object"
+    },
+    "ProfileRef": {
+      "description": "Which intent profile (policy pack, ADR-0016) produced a Plan.\n\nProvenance, never authority: dispatch re-derives every authorization\nunder the CURRENT pack (tighten-only); this records what was in force\nat plan time. The checksum is computed by the loader over the fully\nresolved profile - identity from bytes, not claims.",
+      "properties": {
+        "checksum": {
+          "title": "Checksum",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "builtin",
+            "pack",
+            "legacy-policies-dir"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "tenant": {
+          "title": "Tenant",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant",
+        "name",
+        "version",
+        "checksum",
+        "source"
+      ],
+      "title": "ProfileRef",
       "type": "object"
     },
     "RollbackSpec": {

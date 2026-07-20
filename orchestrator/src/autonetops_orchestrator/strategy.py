@@ -49,6 +49,10 @@ def decide(
     for strategy in strategies or []:
         if strategy.name == plan.policy_evaluation.canary_strategy:
             approvals = list(strategy.requires_approvals)
+    # the plan records its own plan-time bar (strategy + profile floors,
+    # ADR-0016); the decision starts from the union and only tightens later
+    recorded = getattr(plan.policy_evaluation, "approvals_required", None) or []
+    approvals = sorted(set(approvals) | set(recorded))
 
     # Pre-approved change class (ADR-0014): the class review IS the approval,
     # so the per-plan bar drops to zero. Never combined with emergency - an

@@ -79,6 +79,8 @@ autonetops_ibn/
 - New to the project → `docs/architecture/overview.md`
 - The words this project is built on (intent, contract, policy, invariant) →
   `docs/architecture/intent-model.md`
+- How a customer defines their intent layer and binds it to the one engine
+  (intent profiles, policy packs) → `docs/architecture/intent-profiles.md`
 - Understanding component boundaries → `docs/architecture/component-contracts.md`
 - How a rollout Plan lives (compiled → approved → gated → executed) →
   `docs/architecture/plan-lifecycle.md`

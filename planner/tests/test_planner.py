@@ -106,19 +106,6 @@ def test_protocol_selection_policy():
     assert select_protocol(None, prefs) is None
 
 
-def test_delivery_preferences_yaml_matches_builtin_defaults():
-    """The committed policy file and code defaults must not drift."""
-    from autonetops_planner.policies import (
-        DEFAULT_DELIVERY_PREFERENCES,
-        load_delivery_preferences,
-    )
-
-    policies_dir = Path(__file__).parents[1] / "policies"
-    loaded = load_delivery_preferences(policies_dir)
-    assert loaded["platforms"] == DEFAULT_DELIVERY_PREFERENCES["platforms"]
-    assert loaded["default_order"] == DEFAULT_DELIVERY_PREFERENCES["default_order"]
-
-
 def test_plan_id_deterministic_and_roundtrips(changeset):
     strategy = select_strategy(
         load_canary_strategies(None), compute_blast_radius(changeset).classification

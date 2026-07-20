@@ -36,6 +36,8 @@ history / reasoning that shaped it.
 | 0013 | Orchestrator flow: SoT change windows, timeline evaluation, dispatch decision | accepted |
 | 0014 | Pre-approved plan classes: auto-approval as reviewed policy | accepted |
 | 0015 | Intent vocabulary: contracts, policies, invariants | proposed |
+| 0016 | Intent profiles: one engine, per-customer policy packs | proposed |
+| 0017 | Vocabulary alignment with the lab's workshop ontology | proposed |
 
 ## Backlog (decisions we know we owe)
 

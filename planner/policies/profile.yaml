@@ -1,0 +1,37 @@
+# The reference intent profile (ADR-0016) — the pack baked into the platform
+# image at /app/planner/policies. Customers do NOT edit this: a customer pack
+# lives in the customer's own SoT repo (policy-pack/, under CODEOWNERS) and
+# IBN_POLICIES_DIR points at it on both plan and dispatch.
+#
+# This pack extends builtin:baseline and adds exactly one thing: the
+# interface-descriptions pre-approved change class (with its mandatory
+# golden fixtures under tests/change_classes/). Everything else — blast
+# thresholds, canary strategies, delivery preferences, platform bindings —
+# is inherited from the baseline, so behavior matches the engine defaults.
+profile_version: 1
+meta:
+  tenant: autonetops
+  name: autonetops-reference
+  version: "1.0.0"
+  conformance: tuned
+  owner: rollout approvers (CODEOWNERS on planner/policies/)
+  description: >-
+    Reference pack: baseline engine behavior plus the interface-descriptions
+    pre-approved change class. The worked example customer packs start from.
+extends: builtin:baseline
+requires_planner: ">=0.1,<0.2"
+
+platforms:
+  # Historically-supported platforms beyond the baseline's driver-mapped
+  # set, pinned explicitly because this pack is strict: these reproduce
+  # exactly what the legacy guess produced (driver = platform name,
+  # rollback = manual) - now as reviewed data instead of a fallback.
+  # The executor still refuses steps whose driver has no registry entry.
+  cisco_iosxe: {driver: cisco_iosxe, rollback: manual}
+  frr: {driver: frr, rollback: manual}
+
+files:
+  canary_strategies: canary_strategies.yaml    # draft (empty) = inherit baseline
+  change_classes: change_classes.yaml          # never inherited: reviewed HERE
+  delivery_preferences: delivery_preferences.yaml
+  rate_limits: rate_limits.yaml                # validated; engine-ignored (honest)
