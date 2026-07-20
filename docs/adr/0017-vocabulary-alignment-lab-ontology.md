@@ -129,6 +129,14 @@ severity: `critical` and `major` projections block, `warning` projections
 report. The workshop's two values map losslessly: `blocking → major` (or
 `critical` where an incident would page), `warning → warning`.
 
+A third severity vocabulary exists in the wild: the compiled `alerting`
+blocks of `ContractExpectations` artifacts carry a paging scale
+(`sev1`…`sev4`). That is renderer *output*, not authored intent — but a
+vocabulary-reconciliation ADR owes it a mapping, so: the alerting
+compiler derives the paging scale from the authored severity
+(`critical → sev1/sev2`, `major → sev3`, `warning → sev4`; exact split
+is the compiler's reviewed policy). Lab-side owed item.
+
 ### D5. Tenant, Zone, Capability adopted as the supporting vocabulary
 
 The workshop's WHO / WHERE / WITH-WHAT kinds are adopted into
@@ -185,9 +193,12 @@ gains the table with our vocabularies in the cells.
   `intent_model.yml` revision, not added silently.
 - **Intent status**: the workshop's `suspended` is an un-expiring
   off-switch — the exact failure mode ADR-0015 built **waivers** to
-  prevent. Recommended mapping: suspend an intent's enforcement with a
-  time-boxed waiver on its instruments (or `deprecated` when it is
-  really on the way out); no `suspended` status.
+  prevent. Recommended mapping: suspend enforcement with time-boxed
+  waivers on the policies/invariants that guard the intent; the
+  contract-expectation half pauses via the contract's own `status`
+  (`retired`/`draft`) — a waiver's target is only ever a policy or an
+  invariant (correlation rule 3). Use `deprecated` on the intent when
+  it is really on the way out; no `suspended` status.
 - **Waivers and Objectives** exist only on our side; the workshop should
   adopt both (its blocking no-leak/redundancy gates need waivers, or
   every sanctioned exception becomes an unmergeable branch or an eternal

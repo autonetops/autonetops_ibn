@@ -215,7 +215,7 @@ undefined behavior there.
 | Axis | Lives on | Vocabulary | Answers |
 |---|---|---|---|
 | **priority** | the Intent (only; flows down) | low / medium / high / critical | how important is this outcome to the business? Inherited by plans; gates emergency eligibility. |
-| **severity** | the Invariant (and observability signals) | warning / major / critical | what is a violation of this specific condition worth when it happens? Merge-time projections derive their blocking behavior from it. |
+| **severity** | the Invariant | warning / major / critical | what is a violation of this specific condition worth when it happens? Merge-time projections derive their blocking behavior from it. (Compiled alerting blocks carry a paging scale — `sev1`…`sev4` today — which is renderer output, not authored intent; its mapping onto this vocabulary is an owed item in ADR-0017.) |
 | **blast radius** | the Plan (computed); the change window (as a ceiling) | low / moderate / high | how big is this specific change? Selects the canary strategy and the admitting windows. |
 
 A `critical`-priority intent can receive a `low`-blast-radius change
