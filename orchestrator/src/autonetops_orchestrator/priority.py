@@ -4,6 +4,9 @@ The plan itself is mechanism - which artifacts change where. Its URGENCY
 belongs to the intent layer: whichever intents' contracts run on the
 changed devices lend the plan their priority (highest wins). Nothing here
 is typed by hand at dispatch time.
+
+A contract links straight to its intent (`IntentContract.intent`, ADR-0015
+decision 3): one hop, no grouping node in between.
 """
 
 from __future__ import annotations
@@ -18,14 +21,10 @@ query ContractPriorities {
         name { value }
         pe_devices { edges { node { name { value } } } }
         ce_devices { edges { node { name { value } } } }
-        policy {
+        intent {
           node {
-            intent {
-              node {
-                name { value }
-                priority { value }
-              }
-            }
+            name { value }
+            priority { value }
           }
         }
       }
@@ -49,8 +48,7 @@ def intent_priority_for(client, devices: set[str], branch: str = "main") -> tupl
         }
         if not members & devices:
             continue
-        intent = (((node.get("policy") or {}).get("node") or {})
-                  .get("intent") or {}).get("node") or {}
+        intent = (node.get("intent") or {}).get("node") or {}
         priority = (intent.get("priority") or {}).get("value") or "medium"
         intent_name = (intent.get("name") or {}).get("value") or "unknown"
         if PRIORITY_ORDER.get(priority, 1) > PRIORITY_ORDER.get(best, 1):
