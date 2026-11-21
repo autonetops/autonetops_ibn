@@ -29,7 +29,8 @@ means an ADR that supersedes 0015, because external adopters build on these word
 |---|---|
 | [primitives.md](references/primitives.md) | you need a kind's fields, an enum value, or how to create objects |
 | [naming.md](references/naming.md) | naming anything, or translating pre-July-2026 vocabulary (`IntentRealm`, `IntentIntent`, policy-as-bundle) |
-| [extension-checklists.md](references/extension-checklists.md) | adding an intent, a kind, a policy, a waiver or a domain; reviewing a change |
+| [derivation.md](references/derivation.md) | you need to know what a contract becomes: config, expectations, collectors, alerts, and how they link |
+| [extension-checklists.md](references/extension-checklists.md) | adding an intent, a kind, a policy, a waiver or a domain; typing a schema; reviewing a change |
 | [use-case-patterns.md](references/use-case-patterns.md) | "how do we model X?", "does the model cover X?" |
 | [status.md](references/status.md) | before saying that something is checked, compiled or proven |
 
@@ -134,6 +135,9 @@ the `consumer` of a contract inside the service's intent. Two consequences from 
 | Waiver | nothing; it turns a finding into `waived` wherever its target bites | everywhere the target is, expiry checked first |
 | Intent | nothing; lends `derives_from` root, priority, owner | n/a |
 
+What these outputs look like for a real contract, how they are wired in Infrahub and which
+values join them: [references/derivation.md](references/derivation.md).
+
 Three axes that look alike and must stay separate: **priority** (on the intent: how important
 is the outcome), **severity** (on the invariant: what is a violation worth), **blast radius**
 (computed on the plan, a ceiling on the window: how big is this change).
@@ -157,29 +161,7 @@ verdict (`pass | fail | pre_existing | unverifiable`) → drift → compliance. 
 the set of expectations already failing before a change, so a gate blocks regressions, not
 history.
 
-## 4. Typing: make invalid states unrepresentable
-
-Intent should read like a human declaration and behave like a validated API. A formatting
-ambiguity in intent becomes a deployment issue, so remove the ambiguity in the schema:
-
-- A closed vocabulary is a `Dropdown`. A reference to something that exists is a
-  relationship to its SoT kind (device, prefix, zone, tenant), never a `Text` name.
-- Units go in the attribute name (`_seconds`, `_pct`, `_mbps`). Bounded numbers and patterned
-  strings (ASN, community, RD) get a range or `regex`.
-- Scope things with a **selector built from controlled values** (role, zone, group membership),
-  not an enumerated device list where avoidable, and never a free-text selector.
-- No vendor keys (`junos:`, `iosxr:`) in intent. A platform difference is a capability in the
-  SoT plus a renderer arm.
-- Thresholds are typed attributes on the kind that owns them, never constants in a check or
-  transform.
-- What the schema can't express (xor relationships, "at least one contract") becomes a merge
-  check, listed under "Constraints owed as checks" in `IBN/infrahub/schemas/README.md`.
-
-A check must fail loudly when it is **vacuous** (empty scope makes it trivially true, e.g.
-no-leak with no denied zones) or **unverifiable** (missing tenant or anchor). Silent pass is
-the failure mode that erodes trust in every other green light.
-
-## 5. Naming
+## 4. Naming
 
 Object names are lowercase kebab-case and stable: they become `derives_from` URIs, alert labels
 and file names, so a rename is a migration. A name is unique across its generic, so all
@@ -203,7 +185,7 @@ Scope prefix: tenant abbreviation (`custc`), `provider`, `fleet`, or a topology 
 the tree. A shared policy or invariant is named for the condition it states, not for one
 tenant; it takes a tenant prefix only when its `scope` is `intent`.
 
-## 6. Overloaded words: always qualify them
+## 5. Overloaded words: always qualify them
 
 | Word | Meanings here | Say |
 |---|---|---|
@@ -219,7 +201,7 @@ tenant; it takes a tenant prefix only when its `scope` is `intent`.
 | **severity** | invariant severity (`warning\|major\|critical`); signal paging scale (`sev1..sev4`, authored on the signal today) | "invariant severity", "paging scale" |
 | **scope** | policy/invariant `scope`; waiver `subject_scope`; naming scope prefix | the qualified form |
 
-## 7. Deriving an intent from a request
+## 6. Deriving an intent from a request
 
 1. **Outcome.** Restate the request as one sentence a consumer could verify, and apply the
    deletion test. If an existing intent already names this outcome for the same owner and
@@ -241,15 +223,16 @@ tenant; it takes a tenant prefix only when its `scope` is `intent`.
 Fields and enum values: [references/primitives.md](references/primitives.md). Mechanics and a
 worked tree: [references/extension-checklists.md](references/extension-checklists.md) § A.
 
-## 8. Extending the model
+## 7. Extending the model
 
 Look the use-case up in [references/use-case-patterns.md](references/use-case-patterns.md)
 before inventing anything. Most needs are a new *typed kind* under an existing generic; a new
 *concept* needs an ADR. Prefer the narrowest change: new data over a new attribute, a new
-attribute over a new kind, a new kind over a new concept. Steps per change, and the review
-checklist, are in [references/extension-checklists.md](references/extension-checklists.md).
+attribute over a new kind, a new kind over a new concept. Steps per change, the typing rules
+for schema kinds and the review checklist are in
+[references/extension-checklists.md](references/extension-checklists.md).
 
-## 9. Model vs code
+## 8. Gaps: the known ones, and what to do with a new one
 
 The model is ahead of the code. [references/status.md](references/status.md) lists what is
 built and what is owed; read it before saying that something is checked, compiled or proven.
@@ -262,3 +245,15 @@ The traps that matter most while authoring:
 - Waivers, objectives and the one network policy exist as data only.
 - The seed data slices one customer outcome into five intents. Follow the slicing rule in § 2,
   not the seed.
+
+Real requests will hit things that don't fit. Sort a new gap before building around it:
+
+| The gap | Do | Record it |
+|---|---|---|
+| This skill is wrong or silent and the sources are clear | follow the sources | fix the skill in the same change |
+| A kind, field or enum value is missing | author what fits; propose the narrowest schema change to the user | nothing enters the schema without review |
+| The kind exists but nothing compiles, checks or evaluates it | author it anyway and say plainly that it is unproven | `references/status.md`, dated, naming the file that shows it |
+| No word in the vocabulary fits | stop and describe the need in the user's terms | `references/use-case-patterns.md` § 3, then an ADR |
+
+Never close a gap by putting mechanism into intent, inventing a word, packing structured meaning
+into a free-text field, or dropping a term without saying so.

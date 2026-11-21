@@ -5,7 +5,7 @@ at, so re-verify before relying on it. Where code or seed data disagrees with th
 model is the convention and the code is unfinished. Don't copy the existing pattern.
 
 Per-kind state (which kinds compile, which invariants have a projection) is in
-[primitives.md](primitives.md). Names that disagree with the conventions are in
+[primitives.md](primitives.md). What a contract compiles into is in [derivation.md](derivation.md). Names that disagree with the conventions are in
 [naming.md](naming.md).
 
 Contents: 1. built end to end · 2. owed, by layer · 3. docs that lag · 4. suggested build order
@@ -75,6 +75,18 @@ Contents: 1. built end to end · 2. owed, by layer · 3. docs that lag · 4. sug
 - **Constants that the typing rule puts in the SoT**: `MIN_UPTIME_SECONDS`
   (`contract_expectations.py`), `TELEMETRY_CAPABILITIES` (`IH/checks/observability_capability.py`),
   the 60s / 50% defaults (`prometheus_rules.py`).
+- **IPv6 terms are expected but not configured.** The EOS renderer builds IPv4 prefix-lists and
+  `maximum-routes` only, while the expectation carries `maxPrefixes.ipv6` and IPv6
+  `allowedPrefixes` (`device_config.py`, `eos_view`).
+- **A zone has no members.** `IntentZone` is a name and a `zone_type`, so `src_zone` on a
+  security rule compiles to `any`.
+- **Signals collect on the watched contract's `pe_devices` only**, and a device serving two
+  watched contracts tags every metric with the first contract name (`telemetry_collector.py`).
+  On `pe-emea-02` that is `custc-ce-to-pe`, so the `inet-peering-emea` export-violation rule,
+  the runtime evidence for no-leak, queries a label nothing emits.
+- **Monitoring artifacts bypass the engine.** Collector inputs, alert rules and dashboards are
+  copied by `IH/scripts/fetch_artifacts.py`, outside plans, windows and gates. The orchestrator
+  delivers `device-configuration` only.
 - **Target-group membership is manual.** A contract outside `routing_contracts` /
   `observability_contracts` gets no check and no artifact, with no warning.
 - **No golden tests** in either repo. `IBN/infrahub/{checks,queries,transforms,templates,generators,tests}`

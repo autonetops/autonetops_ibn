@@ -7,12 +7,12 @@ alike. Pick the narrowest change that does the job: data before attributes, attr
 kinds, kinds before concepts.
 
 Contents: A. new intent (data) · B. typed contract kind · C. typed invariant kind ·
-D. network policy · E. operational policy · F. waiver · G. domain · H. new concept ·
-I. review checklist
+typing rules · D. network policy · E. operational policy · F. waiver · G. domain ·
+H. new concept · I. review checklist
 
 ## A. New intent (data only, no schema change)
 
-Derive the tree first (`SKILL.md` § 7). Then:
+Derive the tree first (`SKILL.md` § 6). Then:
 
 1. **Root fields**: `name` (per `naming.md`), `domain` (one value from the starter set),
    `owner`, `priority`, `tenant` (required for anything tenant-relative such as no-leak or
@@ -32,6 +32,7 @@ Derive the tree first (`SKILL.md` § 7). Then:
    plan (`ibn-orchestrate plan`) → review the plan.
 
 Fields, enum values and the SDK / GraphQL mechanics are in [primitives.md](primitives.md).
+What each contract then compiles into is in [derivation.md](derivation.md).
 
 ### Worked tree
 
@@ -110,6 +111,29 @@ not_authored:                                # derived or fact
   - device config, expectations              # compiled
 ```
 
+## Typing: make invalid states unrepresentable
+
+Apply these to every kind in B, C and D. Intent should read like a human declaration and
+behave like a validated API. A formatting ambiguity in intent becomes a deployment issue, so
+remove the ambiguity in the schema:
+
+- A closed vocabulary is a `Dropdown`. A reference to something that exists is a
+  relationship to its SoT kind (device, prefix, zone, tenant), never a `Text` name.
+- Units go in the attribute name (`_seconds`, `_pct`, `_mbps`). Bounded numbers and patterned
+  strings (ASN, community, RD) get a range or `regex`.
+- Scope things with a **selector built from controlled values** (role, zone, group membership),
+  not an enumerated device list where avoidable, and never a free-text selector.
+- No vendor keys (`junos:`, `iosxr:`) in intent. A platform difference is a capability in the
+  SoT plus a renderer arm.
+- Thresholds are typed attributes on the kind that owns them, never constants in a check or
+  transform.
+- What the schema can't express (xor relationships, "at least one contract") becomes a merge
+  check, listed under "Constraints owed as checks" in `IBN/infrahub/schemas/README.md`.
+
+A check must fail loudly when it is **vacuous** (empty scope makes it trivially true, e.g.
+no-leak with no denied zones) or **unverifiable** (missing tenant or anchor). Silent pass is
+the failure mode that erodes trust in every other green light.
+
 ## B. New typed contract kind
 
 1. Confirm no existing kind fits with an extra attribute. ADR first if the kind introduces a
@@ -120,7 +144,7 @@ not_authored:                                # derived or fact
    generic gives you (`name`, `description`, `consumer`, `status`, `intent`, `objectives`).
    Description ≤ 128 characters (server cap). `include_in_menu: false`; the generic's menu
    entry lists every subtype.
-3. **Type the terms** (section 4 of `SKILL.md`): relationships to SoT kinds, `Dropdown` for
+3. **Type the terms** (the typing rules above): relationships to SoT kinds, `Dropdown` for
    closed sets, units in names, `regex`/ranges for patterned values. Hysteresis pairs
    (`threshold_pct` / `clear_pct`) and rate limits belong on the contract, not in loop code.
 4. Prefer selectors built from controlled values (role, zone, group) over enumerated device
