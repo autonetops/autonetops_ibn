@@ -1,10 +1,12 @@
 # Use-case patterns and coverage
 
+Paths: `IBN/` = `autonetops_ibn`, `IH/` = `autonetops_infrahub`.
+
 How each common network-automation use-case is expressed in the intent model, and where the
 model or the code stops short. Use it to answer "how do we model X?" and "do we need a new
 concept for X?".
 
-Status column, checked 2026-11-18 against both repos (verify before relying on it):
+Status column, checked 2026-11-21 against both repos (details in [status.md](status.md)):
 **built** = schema + compiler/check exist in the lab · **schema** = kinds exist, nothing
 compiles or checks them · **kind** = fits the vocabulary, needs a new typed kind ·
 **concept** = the vocabulary has no word for it; needs an ADR.
@@ -31,11 +33,11 @@ Contents: 1. patterns by use-case · 2. what kind of gap is it · 3. concept gap
 
 | Use-case | Domain | Express it as | Status |
 |---|---|---|---|
-| Golden config / hardening (NTP, AAA, syslog, SNMP, banners) | compliance / security | network policy `scope: global` + merge check for the rule; a fleet contract for what gets rendered and proven | **kind**; the one existing network policy has no check |
+| Golden config / hardening (NTP, AAA, syslog, SNMP, banners) | compliance / security | network policy `scope: global` + its merge check; a fleet contract for what gets rendered and proven | **kind**; the one existing network policy has no check |
 | Software compliance (approved versions, EOL) | lifecycle | policy or contract objective "version ∈ approved set", evidence from `get_facts` | detect: **kind** · remediate (upgrade): **concept** gap 1 |
 | Certificate / credential rotation | lifecycle | same shape as software compliance | **concept** gap 1 |
 | Audit and regulatory reporting | compliance | compliance roll-up per intent, written back beside it (`OpsPlanRecord` today) | partial: per-contract compliance records are owed |
-| Sanctioned exceptions | any | `IntentWaiver` | **schema**: nothing honors a waiver yet |
+| Sanctioned, temporary violations | any | `IntentWaiver` | **schema**: nothing honors a waiver yet |
 
 ### Change management
 
@@ -59,14 +61,14 @@ Contents: 1. patterns by use-case · 2. what kind of gap is it · 3. concept gap
 | Drift detection and remediation | validator classifies drift → playbook class → safe fix *proposes a plan* | structure only |
 | Troubleshooting, on-demand probes | verifications, executor read verbs only | structure only |
 | Maintenance drain / isolating a device | set a SoT fact (device status) that renderers honor (overload bit, graceful shutdown); cover the planned redundancy loss with a waiver | pattern, not implemented |
-| Incident → regression test | `simulations/golden-topologies/<incident>/` + failing expectation | structure only; simulation is concept gap 5 |
+| Incident → regression test | `IBN/simulations/golden-topologies/<incident>/` + failing expectation | structure only; simulation is concept gap 5 |
 | Capacity planning, what-if | simulations + capacity contracts | **kind** |
 
 ### Day 0 and SoT hygiene
 
 | Use-case | Express it as | Status |
 |---|---|---|
-| Device onboarding / ZTP | facts (device, platform, capabilities, control point); `fleet-*` intents and global rules then apply by scope with no per-device authoring | pattern; `orchestrator/flows/onboard/` is a placeholder |
+| Device onboarding / ZTP | facts (device, platform, capabilities, control point); `fleet-*` intents and global policies and invariants then apply by scope with no per-device authoring | pattern; `IBN/orchestrator/flows/onboard/` is a placeholder |
 | IPAM, resource allocation (addresses, RD/RT, VLAN, ASN) | facts allocated from resource pools; contracts reference them | pattern (derived facts, concept gap 2) |
 | Brownfield discovery / import | observed → SoT is outside the intent model, which only names the result (drift) | **concept** gap 7 |
 
@@ -81,8 +83,8 @@ different amounts.
 2. **Compiler or check gap**: the kind exists but nothing renders, proves or enforces it
    (reachability, reliability, waivers, objectives, most invariants, the network policy).
    Under the model's own law these are unfinished: a contract without expectations can't
-   fail and a policy without a check can't reject. They are listed in `SKILL.md` under
-   Known gaps.
+   fail and a policy without a check can't reject. They are listed in
+   [status.md](status.md).
 3. **Concept gap**: no word in the vocabulary fits. Section 3. Needs an ADR.
 
 Most new use-cases land in bucket 1. Reach for bucket 3 only after the classifying questions
@@ -103,7 +105,7 @@ Ordered by how many use-cases each one blocks.
    intent + facts: session endpoints, allocated addresses and identifiers, per-device objects
    expanded from a service or fabric design. The derived vocabulary names only artifact,
    expectation, plan and rule. The lab already uses both forms (derive in the transform;
-   materialize with a generator) with no rule for choosing, and no marker distinguishing a
+   materialize with a generator) with no guidance for choosing, and no marker distinguishing a
    generated fact from an authored one. Needed for any design-driven use-case (fabrics,
    L2 services, pools). "Realization" is already reserved by ADR-0017 D1 for a grouping of
    contracts, so this needs its own word.
@@ -116,7 +118,7 @@ Ordered by how many use-cases each one blocks.
    text, and policies and invariants have no owner at all. Waiver governance ("approved by
    the target's owner, who is not the requester") and escalation routing both branch on
    these values, so they belong in a controlled kind or mapped to SoT accounts/groups.
-5. **Simulation as an enforcement point.** `simulations/` describes a CI gate that deploys
+5. **Simulation as an enforcement point.** `IBN/simulations/` describes a CI gate that deploys
    candidate artifacts to a golden topology and evaluates expectations before merge. The
    enforcement matrix in `intent-model.md` has no row for it, and "evaluation in simulation"
    is not in the observed vocabulary.
@@ -140,11 +142,11 @@ Industry write-ups on intent modeling converge on roughly the same object list. 
 
 | Commonly proposed object | Here | Difference worth knowing |
 |---|---|---|
-| TenantIntent (identity, VRFs, segments) | `IntentTenant` + IPAM (`IpamVRF`, `IpamPrefix`) | the tenant is WHO; VRFs and prefixes are facts. No named segment object: rules reference prefixes |
+| TenantIntent (identity, VRFs, segments) | `IntentTenant` + IPAM (`IpamVRF`, `IpamPrefix`) | the tenant is WHO; VRFs and prefixes are facts. No named segment object: security rules reference prefixes |
 | RoutingContractIntent | `IntentRoutingContract` | invariants are not nested in the contract; they are shared typed kinds referenced by the intent |
 | ReachabilityIntent | `IntentReachabilityContract` | a contract kind (an objective kind), deliberately not a domain |
 | Path constraints | none yet | kind gap; soft preference = contract term, hard boundary = invariant |
-| SecurityIntent | `IntentSecurityContract` + `IntentSecurityRule` | exceptions are waivers with expiry, not rule comments |
+| SecurityIntent | `IntentSecurityContract` + `IntentSecurityRule` | a sanctioned violation is a waiver with an expiry, not a comment on a rule |
 | ReliabilityIntent | `IntentReliabilityContract` + `IntentRedundancyInvariant` | domain word is `resilience` |
 | ObservabilityIntent | `IntentObservabilityContract` + `IntentObservabilitySignal` | per-service signals ride the service intent; only fleet baselines are observability intents |
 | Expectations (compiled) | `ContractExpectations` artifact | one kind, per contract; reachability and security expectations not compiled yet |
